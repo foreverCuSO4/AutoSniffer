@@ -1,8 +1,8 @@
 
 # AutoSniffer 🗂️
 
-[![English 🇺🇸](https://img.shields.io/badge/Language-English-blue)](#english)
-[![中文 🇨🇳](https://img.shields.io/badge/语言-中文-brightgreen)](#中文)
+[![English 🇺🇸](https://img.shields.io/badge/Language-English-blue)](#English 🇺🇸)
+[![中文 🇨🇳](https://img.shields.io/badge/语言-中文-brightgreen)](#中文 🇨🇳)
 
 ---
 
