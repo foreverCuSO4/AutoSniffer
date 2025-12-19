@@ -1,0 +1,10 @@
+文件文本提取处理摘要
+==================================================
+处理目录: D:\workspace\AutoSniffer\project_main
+输出目录: D:\workspace\AutoSniffer\project_main\extracted_texts
+最大文本长度: 1000
+处理时间: 2025-12-11 15:12:04
+处理文件总数: 8
+成功提取文本: 7
+无文本内容: 1
+处理失败: 0

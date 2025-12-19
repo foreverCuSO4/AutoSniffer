@@ -1,0 +1,39 @@
+import os
+import subprocess
+import tempfile
+
+def print_console_result(result):
+    """以正确编码打印控制台结果"""
+    # 打印执行结果
+    if result['return_code'] == 0:
+        print(f"✅ 脚本执行成功！")
+    else:
+        print(f"❌ 脚本执行失败，返回码: {result['return_code']}")
+    
+    # 处理标准输出
+    if result['stdout'].strip():
+        print(f"📋 标准输出:")
+        # 逐行打印，避免一次性输出大文本导致的编码问题
+        for line in result['stdout'].splitlines():
+            if line.strip():
+                print(f"   {line}")
+    
+    # 处理错误输出
+    if result['stderr'].strip():
+        print(f"⚠️  错误输出:")
+        for line in result['stderr'].splitlines():
+            if line.strip():
+                print(f"   {line}")
+
+def execute_cmd_with_powershell(script_content, working_dir=None, timeout=300):
+    """
+    使用PowerShell执行cmd脚本（更好的中文支持）
+    """
+    if working_dir is None:
+        working_dir = os.getcwd()
+    else:
+        working_dir = os.path.abspath(working_dir)
+        os.makedirs(working_dir, exist_ok=True)
+    
+    # 创建临时bat文件
+    with temp

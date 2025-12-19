@@ -1,0 +1,37 @@
+import os
+import sys
+import json
+from src import config
+from src import file_ops
+from src.ai_service import AIService
+from src import cmd_executor
+
+def main():
+    # 检查是否提供了目录路径参数
+    # if len(sys.argv) < 2:
+    #     print("用法: python main.py <目录路径>")
+    #     sys.exit(1)
+    
+    # 从命令行参数获取根目录，或者使用配置中的默认路径
+    # root_path = sys.argv[1] if len(sys.argv) > 1 else config.DEFAULT_ROOT_PATH
+    root_path = config.DEFAULT_ROOT_PATH
+
+    # 验证路径是否存在且为目录
+    if not os.path.isdir(root_path):
+        print(f"错误: 提供的路径 '{root_path}' 不是一个有效的目录。")
+        sys.exit(1)
+        
+    # 获取目录结构
+    print(f"正在分析目录: {root_path} ...")
+    directory_json_structure = file_ops.get_directory_structure(root_path)
+
+    # 将字典转换为格式化的 JSON 字符串并打印
+    json_output = json.dumps(directory_json_structure, indent=4, ensure_ascii=False)
+    print("目录结构分析完成。")
+    # print(json_output) # 可选：打印目录结构
+
+    print("正在请求 AI 进行整理规划...")
+    
+    # 实例化 AI 服务
+    ai_service = AIService()
+    cmd_instruction = ai_service.get_organiza

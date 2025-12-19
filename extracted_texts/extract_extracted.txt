@@ -1,0 +1,51 @@
+import os
+import re
+import warnings
+import sys
+from typing import Optional, List
+
+# 用于处理不同文件类型的库
+try:
+    import docx
+    HAS_DOCX = True
+except ImportError:
+    HAS_DOCX = False
+    warnings.warn("python-docx库未安装，将无法处理.docx文件")
+
+try:
+    import PyPDF2
+    HAS_PDF = True
+except ImportError:
+    HAS_PDF = False
+    warnings.warn("PyPDF2库未安装，将无法处理PDF文件")
+
+try:
+    from pptx import Presentation
+    HAS_PPTX = True
+except ImportError:
+    HAS_PPTX = False
+    warnings.warn("python-pptx库未安装，将无法处理.pptx文件")
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    warnings.warn("pandas库未安装，将无法处理Excel文件")
+
+def extract_text_from_file(file_path: str, max_length: int = 10000) -> Optional[str]:
+    """
+    从文件中提取文本内容
+    
+    Args:
+        file_path: 文件路径
+        max_length: 最大提取文本长度，默认10000字符
+    
+    Returns:
+        提取的文本内容，如果提取失败返回None
+    """
+    if not os.path.exists(file_path):
+        print(f"文件不存在: {file_path}")
+        return None
+    
+    file_ex

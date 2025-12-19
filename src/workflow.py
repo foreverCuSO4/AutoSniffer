@@ -1,0 +1,476 @@
+import json
+import os
+import shutil
+from datetime import datetime
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from . import file_ops
+from .ai_service import AIService
+from . import cmd_executor
+
+
+@dataclass
+class ExecutionResult:
+    return_code: int
+    stdout: str
+    stderr: str
+    executed_file: str
+
+
+class OrganizerWorkflow:
+    """High-level workflow wrapper for the organizer.
+
+    Keeps UI thin by centralizing:
+    1) directory scanning
+    2) AI planning
+    3) script execution
+    """
+
+    def __init__(self, ai_service: Optional[AIService] = None):
+        self._ai_service = ai_service or AIService()
+
+    @staticmethod
+    def validate_root_path(root_path: str) -> str:
+        if not root_path:
+            raise ValueError("root_path 不能为空")
+        root_path = os.path.abspath(root_path)
+        if not os.path.isdir(root_path):
+            raise ValueError(f"不是有效目录: {root_path}")
+        return root_path
+
+    @staticmethod
+    def scan_directory(root_path: str) -> Dict[str, Any]:
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        return file_ops.get_directory_structure(root_path)
+
+    @staticmethod
+    def format_structure_json(structure: Dict[str, Any]) -> str:
+        return json.dumps(structure, indent=4, ensure_ascii=False)
+
+    def plan_with_ai(self, directory_json: str) -> str:
+        if not directory_json or not directory_json.strip():
+            raise ValueError("directory_json 不能为空")
+        cmd_instruction = self._ai_service.get_organization_plan(directory_json)
+        if not cmd_instruction or not str(cmd_instruction).strip():
+            raise RuntimeError("AI 未返回有效的整理指令")
+        return str(cmd_instruction)
+
+    # --- Two-stage pipeline ---
+
+    def stage1_plan_folders(self, directory_json: str, model: Optional[str] = None) -> List[str]:
+        return self._ai_service.get_folder_plan_stage1(directory_json, model=model)
+
+    @staticmethod
+    def build_mkdir_script(folders: List[str]) -> str:
+        safe_folders = [f.strip().strip("\\/") for f in (folders or []) if (f or "").strip()]
+        lines = [
+            "@echo off",
+            "cd /d \"%~dp0\"",
+        ]
+        for folder in safe_folders:
+            # Quote folder names; suppress errors if exists
+            lines.append(f'mkdir "{folder}" 2>nul')
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def flatten_files(structure: Dict[str, Any]) -> List[Dict[str, Any]]:
+        files: List[Dict[str, Any]] = []
+
+        def walk(node: Dict[str, Any]):
+            if not isinstance(node, dict):
+                return
+            if node.get("type") == "file":
+                rel = str(node.get("relative_path") or node.get("name") or "")
+                name = str(node.get("name") or "")
+                ext = os.path.splitext(name)[1].lower()
+                files.append(
+                    {
+                        "name": name,
+                        "relative_path": rel,
+                        "extension": ext,
+                        "metadata": node.get("metadata"),
+                    }
+                )
+                return
+            for child in node.get("children", []) or []:
+                walk(child)
+
+        walk(structure)
+        # stable order
+        files.sort(key=lambda x: str(x.get("relative_path") or ""))
+        return files
+
+    def stage2_choose_destination(self, file_item: Dict[str, Any], allowed_folders: List[str], model: Optional[str] = None) -> str:
+        payload = {
+            "allowed_folders": allowed_folders,
+            "file": file_item,
+        }
+        dest = self._ai_service.choose_destination_stage2(payload, model=model)
+        if dest not in allowed_folders:
+            # enforce constraint
+            return "其他" if "其他" in allowed_folders else allowed_folders[-1]
+        return dest
+
+    def stage2_choose_destinations_batch(
+        self,
+        file_items: List[Dict[str, Any]],
+        allowed_folders: List[str],
+        model: Optional[str] = None,
+    ) -> List[str]:
+        payload = {
+            "allowed_folders": allowed_folders,
+            "files": file_items,
+        }
+        assignments = self._ai_service.choose_destinations_batch_stage2(payload, model=model)
+
+        # Build a map by relative_path to be resilient to minor model mistakes
+        by_path: Dict[str, str] = {}
+        for a in assignments:
+            rp = str(a.get("relative_path") or "")
+            dst = str(a.get("destination") or "")
+            if rp:
+                by_path[rp] = dst
+
+        destinations: List[str] = []
+        for item in file_items:
+            rp = str(item.get("relative_path") or "")
+            dst = by_path.get(rp, "")
+            if dst not in allowed_folders:
+                dst = "其他" if "其他" in allowed_folders else allowed_folders[-1]
+            destinations.append(dst)
+        return destinations
+
+    @staticmethod
+    def chunk_list(items: List[Any], chunk_size: int) -> List[List[Any]]:
+        if chunk_size <= 0:
+            chunk_size = 1
+        return [items[i : i + chunk_size] for i in range(0, len(items), chunk_size)]
+
+    @staticmethod
+    def build_move_command(file_relative_path: str, destination_folder: str) -> str:
+        src = (file_relative_path or "").replace("/", "\\")
+        dst = (destination_folder or "").strip().strip("\\/") + "\\"
+        return f'move "{src}" "{dst}" >nul 2>nul'
+
+    @staticmethod
+    def build_batch_script(cmd_lines: List[str]) -> str:
+        lines = [
+            "@echo off",
+            "cd /d \"%~dp0\"",
+        ]
+        for line in cmd_lines:
+            if (line or "").strip():
+                lines.append(line)
+        return "\n".join(lines) + "\n"
+
+    def stage2_process_files(
+        self,
+        root_path: str,
+        structure: Dict[str, Any],
+        allowed_folders: List[str],
+        timeout_seconds: int = 300,
+    ) -> Tuple[List[Dict[str, Any]], List[ExecutionResult]]:
+        """Process files one-by-one: ask AI for destination then execute move.
+
+        Returns:
+          - per-file decisions list: {relative_path, destination, command}
+          - execution results list aligned with decisions
+        """
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        files = self.flatten_files(structure)
+        decisions: List[Dict[str, Any]] = []
+        results: List[ExecutionResult] = []
+        for item in files:
+            rel = str(item.get("relative_path") or "")
+            dest = self.stage2_choose_destination(item, allowed_folders)
+            cmd_line = self.build_move_command(rel, dest)
+            decisions.append({"relative_path": rel, "destination": dest, "command": cmd_line})
+            results.append(
+                self.execute_script(cmd_line, working_dir=root_path, timeout_seconds=timeout_seconds)
+            )
+        return decisions, results
+
+    def stage2_process_files_batched(
+        self,
+        root_path: str,
+        structure: Dict[str, Any],
+        allowed_folders: List[str],
+        batch_size: int = 5,
+        timeout_seconds: int = 300,
+        model: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], List[ExecutionResult]]:
+        """Stage2 batched: one AI call per N files, then execute ONE bat per batch containing N move commands."""
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        all_files = self.flatten_files(structure)
+        decisions: List[Dict[str, Any]] = []
+        batch_results: List[ExecutionResult] = []
+
+        for batch in self.chunk_list(all_files, batch_size):
+            destinations = self.stage2_choose_destinations_batch(batch, allowed_folders, model=model)
+            cmd_lines: List[str] = []
+            for item, dest in zip(batch, destinations):
+                rel = str(item.get("relative_path") or "")
+                cmd_line = self.build_move_command(rel, dest)
+                decisions.append({"relative_path": rel, "destination": dest, "command": cmd_line})
+                cmd_lines.append(cmd_line)
+
+            script = self.build_batch_script(cmd_lines)
+            batch_results.append(
+                self.execute_script(script, working_dir=root_path, timeout_seconds=timeout_seconds)
+            )
+
+        return decisions, batch_results
+
+    # --- Journaling + Undo (Python-based, conflict-safe) ---
+
+    @staticmethod
+    def _history_dir(root_path: str) -> str:
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        history = os.path.join(root_path, ".autosniffer_history")
+        os.makedirs(history, exist_ok=True)
+        return history
+
+    @staticmethod
+    def _now_id() -> str:
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    @staticmethod
+    def _unique_path(path: str, suffix: str) -> str:
+        p = Path(path)
+        parent = p.parent
+        stem = p.stem
+        ext = p.suffix
+        candidate = parent / f"{stem}{suffix}{ext}"
+        i = 1
+        while candidate.exists():
+            candidate = parent / f"{stem}{suffix}_{i}{ext}"
+            i += 1
+        return str(candidate)
+
+    def create_folders_python(self, root_path: str, folders: List[str]) -> List[str]:
+        """Create top-level folders and return the list that were newly created (relative names)."""
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        created: List[str] = []
+        for f in folders or []:
+            name = (f or "").strip().strip("\\/")
+            if not name:
+                continue
+            abs_dir = os.path.join(root_path, name)
+            if not os.path.exists(abs_dir):
+                os.makedirs(abs_dir, exist_ok=True)
+                created.append(name)
+        return created
+
+    def move_files_python(
+        self,
+        root_path: str,
+        file_items: List[Dict[str, Any]],
+        destinations: List[str],
+        *,
+        on_conflict: str = "rename",
+    ) -> List[Dict[str, Any]]:
+        """Move a batch of files with conflict handling.
+
+        Returns per-file records:
+          {src_rel, intended_dst_folder, intended_dst_rel, final_dst_rel, status, error, conflict}
+        """
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        if len(file_items or []) != len(destinations or []):
+            raise ValueError("file_items 与 destinations 长度不一致")
+
+        results: List[Dict[str, Any]] = []
+        for item, dst_folder in zip(file_items, destinations):
+            src_rel = str(item.get("relative_path") or "").replace("/", "\\")
+            name = str(item.get("name") or os.path.basename(src_rel) or "")
+            safe_folder = (dst_folder or "").strip().strip("\\/")
+            if not safe_folder:
+                safe_folder = "其他"
+
+            src_abs = os.path.join(root_path, src_rel)
+            dst_dir_abs = os.path.join(root_path, safe_folder)
+            os.makedirs(dst_dir_abs, exist_ok=True)
+            intended_dst_abs = os.path.join(dst_dir_abs, name)
+
+            record: Dict[str, Any] = {
+                "src_rel": src_rel.replace("\\", "/"),
+                "intended_dst_folder": safe_folder,
+                "intended_dst_rel": os.path.join(safe_folder, name).replace("\\", "/"),
+                "final_dst_rel": "",
+                "status": "pending",
+                "error": "",
+                "conflict": False,
+            }
+
+            try:
+                if not os.path.exists(src_abs):
+                    record["status"] = "skipped"
+                    record["error"] = "源文件不存在（可能已被移动/删除）"
+                    results.append(record)
+                    continue
+
+                final_dst_abs = intended_dst_abs
+                if os.path.exists(final_dst_abs):
+                    record["conflict"] = True
+                    if on_conflict == "rename":
+                        final_dst_abs = self._unique_path(final_dst_abs, "__conflict")
+                    else:
+                        record["status"] = "failed"
+                        record["error"] = "目标已存在"
+                        results.append(record)
+                        continue
+
+                shutil.move(src_abs, final_dst_abs)
+                record["status"] = "moved"
+                record["final_dst_rel"] = os.path.relpath(final_dst_abs, root_path).replace("\\", "/")
+            except Exception as e:
+                record["status"] = "failed"
+                record["error"] = str(e)
+            results.append(record)
+
+        return results
+
+    def write_journal(self, root_path: str, journal: Dict[str, Any]) -> str:
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        history = self._history_dir(root_path)
+        run_id = str(journal.get("id") or self._now_id())
+        journal["id"] = run_id
+        journal.setdefault("version", 1)
+        journal.setdefault("created_at", datetime.now().isoformat(timespec="seconds"))
+        journal.setdefault("root_path", root_path)
+        path = os.path.join(history, f"{run_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(journal, f, ensure_ascii=False, indent=2)
+        return path
+
+    def load_last_journal(self, root_path: str) -> Optional[Tuple[str, Dict[str, Any]]]:
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        history = self._history_dir(root_path)
+        candidates = [p for p in Path(history).glob("*.json") if p.is_file()]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        latest = candidates[0]
+        with open(latest, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        return str(latest), obj
+
+    def undo_last(self, root_path: str, *, on_conflict: str = "rename") -> Dict[str, Any]:
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        loaded = self.load_last_journal(root_path)
+        if not loaded:
+            raise ValueError("未找到可撤销的历史记录（.autosniffer_history 为空）")
+        journal_path, journal = loaded
+
+        moves = journal.get("moves") or []
+        if not isinstance(moves, list) or not moves:
+            raise ValueError("历史记录中没有 moves")
+
+        undo_results: List[Dict[str, Any]] = []
+        moved_count = 0
+        restored_count = 0
+        conflict_count = 0
+        fail_count = 0
+
+        # Reverse order is safer
+        for m in reversed(moves):
+            if not isinstance(m, dict):
+                continue
+            if m.get("status") != "moved":
+                continue
+            moved_count += 1
+
+            src_rel = str(m.get("src_rel") or "")
+            final_dst_rel = str(m.get("final_dst_rel") or m.get("intended_dst_rel") or "")
+            if not src_rel or not final_dst_rel:
+                continue
+
+            current_abs = os.path.join(root_path, final_dst_rel.replace("/", "\\"))
+            target_abs = os.path.join(root_path, src_rel.replace("/", "\\"))
+
+            record = {
+                "from": final_dst_rel,
+                "to": src_rel,
+                "final_to": "",
+                "status": "pending",
+                "error": "",
+                "conflict": False,
+            }
+
+            try:
+                if not os.path.exists(current_abs):
+                    record["status"] = "skipped"
+                    record["error"] = "待撤销文件不存在（可能已被改动）"
+                    undo_results.append(record)
+                    continue
+
+                final_target_abs = target_abs
+                if os.path.exists(final_target_abs):
+                    record["conflict"] = True
+                    conflict_count += 1
+                    if on_conflict == "rename":
+                        final_target_abs = self._unique_path(final_target_abs, "__undo_conflict")
+                    else:
+                        record["status"] = "failed"
+                        record["error"] = "原位置已存在同名文件"
+                        fail_count += 1
+                        undo_results.append(record)
+                        continue
+
+                os.makedirs(os.path.dirname(final_target_abs), exist_ok=True)
+                shutil.move(current_abs, final_target_abs)
+                record["status"] = "restored"
+                record["final_to"] = os.path.relpath(final_target_abs, root_path).replace("\\", "/")
+                restored_count += 1
+            except Exception as e:
+                record["status"] = "failed"
+                record["error"] = str(e)
+                fail_count += 1
+            undo_results.append(record)
+
+        # Try remove empty folders that were created by this run
+        removed_dirs: List[str] = []
+        created_folders = journal.get("created_folders") or []
+        if isinstance(created_folders, list):
+            # deeper first (though these are top-level, keep safe)
+            for folder in sorted([str(x) for x in created_folders if str(x).strip()], key=len, reverse=True):
+                abs_dir = os.path.join(root_path, folder.strip().strip("\\/"))
+                try:
+                    if os.path.isdir(abs_dir) and not os.listdir(abs_dir):
+                        os.rmdir(abs_dir)
+                        removed_dirs.append(folder)
+                except Exception:
+                    pass
+
+        # Write an undo report next to journal
+        report = {
+            "journal": os.path.basename(journal_path),
+            "moved_in_journal": moved_count,
+            "restored": restored_count,
+            "conflicts": conflict_count,
+            "failed": fail_count,
+            "removed_empty_folders": removed_dirs,
+            "undo_results": undo_results,
+        }
+        report_path = os.path.join(os.path.dirname(journal_path), f"{Path(journal_path).stem}__undo.json")
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        return {"report_path": report_path, **report}
+
+    @staticmethod
+    def execute_script(script_content: str, working_dir: str, timeout_seconds: int = 300) -> ExecutionResult:
+        if not script_content or not script_content.strip():
+            raise ValueError("script_content 不能为空")
+        working_dir = OrganizerWorkflow.validate_root_path(working_dir)
+        result = cmd_executor.execute_cmd_with_powershell(
+            script_content,
+            working_dir=working_dir,
+            timeout=timeout_seconds,
+        )
+        return ExecutionResult(
+            return_code=int(result.get("return_code") or -1),
+            stdout=str(result.get("stdout") or ""),
+            stderr=str(result.get("stderr") or ""),
+            executed_file=str(result.get("executed_file") or ""),
+        )

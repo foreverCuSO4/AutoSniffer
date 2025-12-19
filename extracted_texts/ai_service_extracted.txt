@@ -1,0 +1,27 @@
+from openai import OpenAI
+from . import config
+
+class AIService:
+    def __init__(self):
+        self.client = OpenAI(
+            api_key=config.API_KEY,
+            base_url=config.API_BASE_URL,
+        )
+
+    def get_organization_plan(self, directory_json):
+        """
+        Sends the directory structure to the AI model and retrieves the organization plan (CMD commands).
+        """
+        try:
+            completion = self.client.chat.completions.create(
+                model=config.MODEL_NAME,
+                messages=[
+                    {'role': 'system', 'content': config.SYSTEM_PROMPT},
+                    {'role': 'user', 'content': directory_json}
+                ]
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"AI Service Error: {e}")
+            print("请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code")
+            raise e
