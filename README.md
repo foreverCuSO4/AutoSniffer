@@ -1,18 +1,18 @@
 
-# AutoSniffer
+# AutoSniffer 🗂️
 
 [![English](https://img.shields.io/badge/Language-English-blue)](#english)
 [![中文](https://img.shields.io/badge/语言-中文-brightgreen)](#中文)
 
 ---
 
-## English
+## English 🇺🇸
 
 AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API, e.g. DashScope/Qwen) with a desktop GUI (Flet). It scans a folder, proposes categories, moves files in batches, and supports **Undo last run** (best-effort restore with conflict-safe renaming).
 
 ---
 
-## Features
+## Features ✨
 
 - Two-stage workflow
 	- Stage 1: only plans folders, then creates folders
@@ -26,7 +26,7 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 
 ---
 
-## Project Structure
+## Project Structure 🧩
 
 - `ui_app.py`: GUI entry (Flet)
 - `src/workflow.py`: core workflow (scan/plan/move/undo)
@@ -37,7 +37,7 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 
 ---
 
-## Requirements
+## Requirements 🧰
 
 - Windows recommended
 - Python 3.9+ recommended
@@ -50,7 +50,7 @@ pip install -r requirements.txt
 
 ---
 
-## Quick Start (GUI)
+## Quick Start (GUI) 🚀
 
 Run the GUI:
 
@@ -76,9 +76,9 @@ Tip: for important folders, test on a copy first.
 
 ---
 
-## Configuration
+## Configuration ⚙️
 
-### Environment Variables
+### Environment Variables 🧾
 
 - `AUTOSNIFFER_API_KEY` (or `DASHSCOPE_API_KEY`)
 - `AUTOSNIFFER_API_BASE_URL`
@@ -87,14 +87,14 @@ Tip: for important folders, test on a copy first.
 - `AUTOSNIFFER_MODEL_NAME` (fallback model name)
 - `AUTOSNIFFER_STAGE2_BATCH_SIZE` (CLI only; GUI uses the field)
 
-### Model Suggestions
+### Model Suggestions 🤖
 
 - Stage 1: better at planning + strict JSON output
 - Stage 2: better at batch classification + strict JSON output
 
 ---
 
-## Undo (Best-effort)
+## Undo (Best-effort) ↩️
 
 After Stage 2 finishes, AutoSniffer writes a journal:
 
@@ -103,11 +103,11 @@ After Stage 2 finishes, AutoSniffer writes a journal:
 
 Click **撤销上一次** to restore files based on the latest journal.
 
-### Conflict Handling
+### Conflict Handling ⚔️
 
 If a file already exists at the restore target location, AutoSniffer will **rename** the restoring file to keep both copies (suffix like `__undo_conflict`, plus an index if needed).
 
-### Limitations
+### Limitations ⚠️
 
 - Undo is “best-effort”: if files were edited/renamed/moved manually after the run, some items may be skipped or fail.
 - Only files recorded as successfully moved (`status = moved`) are reversed.
@@ -115,7 +115,7 @@ If a file already exists at the restore target location, AutoSniffer will **rena
 
 ---
 
-## CLI Usage
+## CLI Usage ⌨️
 
 The CLI (`main.py`) is mainly a demo and uses `DEFAULT_ROOT_PATH` from `src/config.py`.
 
@@ -127,7 +127,7 @@ For most users, the GUI is recommended.
 
 ---
 
-## Text Extraction Utility
+## Text Extraction Utility 📄
 
 `extract.py` can extract text from common document formats.
 
@@ -148,7 +148,7 @@ Outputs are saved under `extracted_texts/` by default for `--dir` mode.
 
 ---
 
-## Troubleshooting
+## Troubleshooting 🩺
 
 ### API Key missing
 
@@ -167,19 +167,19 @@ Outputs are saved under `extracted_texts/` by default for `--dir` mode.
 
 ---
 
-## Disclaimer
+## Disclaimer 📌
 
 This tool performs real file operations. AI classification is heuristic and may be wrong. Always test on a copy or use Undo immediately if needed.
 
 ---
 
-## 中文
+## 中文 🇨🇳
 
 AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashScope/Qwen）的**两阶段文件整理工具**，提供桌面 GUI（Flet）来扫描目录、生成分类目录、批量归类移动文件，并支持“撤销上一次整理”（尽量还原到执行前状态，遇到冲突会自动改名保留）。
 
 ---
 
-## 功能
+## 功能 ✨
 
 - 两阶段流程
 	- 阶段1：仅规划分类目录并创建文件夹
@@ -193,7 +193,7 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 
 ---
 
-## 项目结构
+## 项目结构 🧩
 
 - `ui_app.py`：GUI 入口
 - `src/workflow.py`：业务编排（扫描/规划/移动/撤销）
@@ -204,7 +204,7 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 
 ---
 
-## 环境依赖
+## 环境依赖 🧰
 
 - 推荐 Windows（项目内的执行器与路径处理主要面向 Windows）
 - 推荐 Python 3.9+
@@ -217,7 +217,7 @@ pip install -r requirements.txt
 
 ---
 
-## 快速开始（GUI）
+## 快速开始（GUI）🚀
 
 运行 GUI：
 
@@ -243,9 +243,9 @@ GUI 内操作：
 
 ---
 
-## 配置
+## 配置 ⚙️
 
-### 环境变量
+### 环境变量 🧾
 
 - `AUTOSNIFFER_API_KEY`（或 `DASHSCOPE_API_KEY`）
 - `AUTOSNIFFER_API_BASE_URL`
@@ -254,14 +254,14 @@ GUI 内操作：
 - `AUTOSNIFFER_MODEL_NAME`（兜底模型名）
 - `AUTOSNIFFER_STAGE2_BATCH_SIZE`（仅 CLI 使用；GUI 使用界面字段）
 
-### 模型建议
+### 模型建议 🤖
 
 - 阶段1：更偏“规划”与“稳定输出 JSON”
 - 阶段2：更偏“批量分类”与“严格受控输出”
 
 ---
 
-## 撤销（尽量还原）
+## 撤销（尽量还原）↩️
 
 阶段2完成后会写入历史记录：
 
@@ -270,11 +270,11 @@ GUI 内操作：
 
 点击 **撤销上一次** 会基于最近一次记录尝试把已移动文件移回原位置。
 
-### 冲突处理
+### 冲突处理 ⚔️
 
 如果原位置已存在同名文件，会自动重命名（例如添加 `__undo_conflict` 后缀并按需追加序号），以保留两份。
 
-### 注意事项
+### 注意事项 ⚠️
 
 - “撤销”是尽量还原：如果整理后文件被手动改名/移动/编辑，可能会跳过或失败。
 - 仅会撤销日志中记录为成功移动（`status = moved`）的条目。
@@ -282,7 +282,7 @@ GUI 内操作：
 
 ---
 
-## 命令行用法
+## 命令行用法 ⌨️
 
 CLI（`main.py`）主要用于演示，默认使用 `src/config.py` 中的 `DEFAULT_ROOT_PATH`。
 
@@ -294,7 +294,7 @@ python main.py
 
 ---
 
-## 文本提取工具
+## 文本提取工具 📄
 
 `extract.py` 支持从常见文档中提取文本。
 
@@ -315,7 +315,7 @@ python extract.py --batch a.docx b.pdf c.pptx
 
 ---
 
-## 常见问题
+## 常见问题 🩺
 
 ### 未填写 API Key
 
@@ -334,6 +334,6 @@ python extract.py --batch a.docx b.pdf c.pptx
 
 ---
 
-## 免责声明
+## 免责声明 📌
 
 本工具会执行真实的文件移动操作，模型分类可能出错。请先在副本/测试目录运行，必要时立即使用“撤销上一次”。
