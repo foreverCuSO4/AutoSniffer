@@ -1,10 +1,12 @@
 
 # AutoSniffer 🗂️
 
-[![English 🇺🇸](https://img.shields.io/badge/Language-English-blue)](#English 🇺🇸)
-[![中文 🇨🇳](https://img.shields.io/badge/语言-中文-brightgreen)](#中文 🇨🇳)
+[![English 🇺🇸](https://img.shields.io/badge/Language-English-blue)](#english)
+[![中文 🇨🇳](https://img.shields.io/badge/语言-中文-brightgreen)](#chinese)
 
 ---
+
+<a id="english"></a>
 
 ## English 🇺🇸
 
@@ -174,6 +176,8 @@ Outputs are saved under `extracted_texts/` by default for `--dir` mode.
 This tool performs real file operations. AI classification is heuristic and may be wrong. Always test on a copy or use Undo immediately if needed.
 
 ---
+
+<a id="chinese"></a>
 
 ## 中文 🇨🇳
 
