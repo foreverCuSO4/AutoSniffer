@@ -6,177 +6,6 @@
 
 ---
 
-<a id="english"></a>
-
-## English 🇺🇸
-
-AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API, e.g. DashScope/Qwen) with a desktop GUI (Flet). It scans a folder, proposes categories, moves files in batches, and supports **Undo last run** (best-effort restore with conflict-safe renaming).
-
----
-
-## Features ✨
-
-- 🧭 Two-stage workflow
-	- 🧱 Stage 1: only plans folders, then creates folders
-	- 📦 Stage 2: batch classification + move
-- 🖥️ GUI (Flet) with progress + stop
-- ↩️ Best-effort Undo last run
-	- 🧾 Uses a journal under `.autosniffer_history/`
-	- 🧷 Conflict-safe renaming on restore
-- 📄 Optional text extraction tool
-	- 🔎 Extract text from `pdf/docx/pptx/xlsx/txt/...` for inspection
-
----
-
-## Project Structure 🧩
-
-- `ui_app.py`: GUI entry (Flet)
-- `src/workflow.py`: core workflow (scan/plan/move/undo)
-- `src/ai_service.py`: AI calls (OpenAI SDK)
-- `src/cmd_executor.py`: PowerShell runner (used by legacy CLI/batch scripts)
-- `main.py`: CLI demo (two-stage batch)
-- `extract.py`: text extraction utility
-
----
-
-## Requirements 🧰
-
-- 🪟 Windows recommended
-- 🐍 Python 3.9+ recommended
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Quick Start (GUI) 🚀
-
-Run the GUI:
-
-```bash
-flet run ui_app.py
-```
-
-Or:
-
-```bash
-python ui_app.py
-```
-
-In the GUI:
-
-1. ⚙️ Go to **Settings** and fill `API Key` (and `API Base URL` if needed)
-2. 🗂️ Go to the **Workflow** tab
-3. 📁 Choose a target folder, then click **Scan/Analyze** to preview the directory structure
-4. 🧱 Stage 1: click **Generate folders**, optionally edit the folder list, then click **Create folders** (no files are moved)
-5. 📦 Stage 2: click **Batch move** to classify and move files (real moves)
-
-Tip: 🧪 for important folders, test on a copy first.
-
----
-
-## Configuration ⚙️
-
-### Environment Variables 🧾
-
-
-- 🔑 `AUTOSNIFFER_API_KEY` (or `DASHSCOPE_API_KEY`)
-- 🌐 `AUTOSNIFFER_API_BASE_URL`
-	- Default: `https://dashscope.aliyuncs.com/compatible-mode/v1`
-
-- 🧠 `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
-- 🏷️ `AUTOSNIFFER_MODEL_NAME` (fallback model name)
-- 📦 `AUTOSNIFFER_STAGE2_BATCH_SIZE` (CLI only; GUI uses the field)
-
-### Model Suggestions 🤖
-
-- Stage 1: better at planning + strict JSON output
-- Stage 2: better at batch classification + strict JSON output
-
----
-
-## Undo (Best-effort) ↩️
-
-After Stage 2 finishes, AutoSniffer writes a journal:
-
-- 🗃️ Folder: `.autosniffer_history/`
-- 🧾 File: `<run_id>.json` (e.g. `20251220_153012.json`)
-
-Click **撤销上一次** to restore files based on the latest journal.
-
-### Conflict Handling ⚔️
-
-If a file already exists at the restore target location, AutoSniffer will **rename** the restoring file to keep both copies (suffix like `__undo_conflict`, plus an index if needed).
-
-### Limitations ⚠️
-
-- ⚠️ Undo is “best-effort”: if files were edited/renamed/moved manually after the run, some items may be skipped or fail.
-- ✅ Only files recorded as successfully moved (`status = moved`) are reversed.
-- 🧹 Stage 1 folders created by the run will be removed only if they are still empty.
-
----
-
-## CLI Usage ⌨️
-
-The CLI (`main.py`) is mainly a demo and uses `DEFAULT_ROOT_PATH` from `src/config.py`.
-
-```bash
-python main.py
-```
-
-For most users, the GUI is recommended.
-
----
-
-## Text Extraction Utility 📄
-
-`extract.py` can extract text from common document formats.
-
-Examples:
-
-```bash
-# single file
-python extract.py path\to\document.pdf
-
-# extract all supported files under a directory
-python extract.py --dir path\to\folder
-
-# batch mode
-python extract.py --batch a.docx b.pdf c.pptx
-```
-
-Outputs are saved under `extracted_texts/` by default for `--dir` mode.
-
----
-
-## Troubleshooting 🩺
-
-### API Key missing
-
-- 🔑 Fill it in GUI Settings tab, or set `AUTOSNIFFER_API_KEY` / `DASHSCOPE_API_KEY`.
-
-### Model returns invalid JSON
-
-- 🤖 Try a more stable model.
-- 📦 Reduce batch size.
-
-### Some files not moved
-
-- 🔐 Check file permissions / 文件权限
-- 🔒 Check if file is in use / 文件是否被占用
-- 🧾 See the journal and undo report in `.autosniffer_history/`
-
----
-
-## Disclaimer 📌
-
-This tool performs real file operations. AI classification is heuristic and may be wrong. Always test on a copy or use Undo immediately if needed.
-
----
-
 <a id="chinese"></a>
 
 ## 中文 🇨🇳
@@ -345,3 +174,174 @@ python extract.py --batch a.docx b.pdf c.pptx
 ## 免责声明 📌
 
 本工具会执行真实的文件移动操作，模型分类可能出错。请先在副本/测试目录运行，必要时立即使用“撤销上一次”。
+
+---
+
+<a id="english"></a>
+
+## English 🇺🇸
+
+AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API, e.g. DashScope/Qwen) with a desktop GUI (Flet). It scans a folder, proposes categories, moves files in batches, and supports **Undo last run** (best-effort restore with conflict-safe renaming).
+
+---
+
+## Features ✨
+
+- 🧭 Two-stage workflow
+	- 🧱 Stage 1: only plans folders, then creates folders
+	- 📦 Stage 2: batch classification + move
+- 🖥️ GUI (Flet) with progress + stop
+- ↩️ Best-effort Undo last run
+	- 🧾 Uses a journal under `.autosniffer_history/`
+	- 🧷 Conflict-safe renaming on restore
+- 📄 Optional text extraction tool
+	- 🔎 Extract text from `pdf/docx/pptx/xlsx/txt/...` for inspection
+
+---
+
+## Project Structure 🧩
+
+- `ui_app.py`: GUI entry (Flet)
+- `src/workflow.py`: core workflow (scan/plan/move/undo)
+- `src/ai_service.py`: AI calls (OpenAI SDK)
+- `src/cmd_executor.py`: PowerShell runner (used by legacy CLI/batch scripts)
+- `main.py`: CLI demo (two-stage batch)
+- `extract.py`: text extraction utility
+
+---
+
+## Requirements 🧰
+
+- 🪟 Windows recommended
+- 🐍 Python 3.9+ recommended
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## Quick Start (GUI) 🚀
+
+Run the GUI:
+
+```bash
+flet run ui_app.py
+```
+
+Or:
+
+```bash
+python ui_app.py
+```
+
+In the GUI:
+
+1. ⚙️ Go to **Settings** and fill `API Key` (and `API Base URL` if needed)
+2. 🗂️ Go to the **Workflow** tab
+3. 📁 Choose a target folder, then click **Scan/Analyze** to preview the directory structure
+4. 🧱 Stage 1: click **Generate folders**, optionally edit the folder list, then click **Create folders** (no files are moved)
+5. 📦 Stage 2: click **Batch move** to classify and move files (real moves)
+
+Tip: 🧪 for important folders, test on a copy first.
+
+---
+
+## Configuration ⚙️
+
+### Environment Variables 🧾
+
+
+- 🔑 `AUTOSNIFFER_API_KEY` (or `DASHSCOPE_API_KEY`)
+- 🌐 `AUTOSNIFFER_API_BASE_URL`
+	- Default: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+
+- 🧠 `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
+- 🏷️ `AUTOSNIFFER_MODEL_NAME` (fallback model name)
+- 📦 `AUTOSNIFFER_STAGE2_BATCH_SIZE` (CLI only; GUI uses the field)
+
+### Model Suggestions 🤖
+
+- Stage 1: better at planning + strict JSON output
+- Stage 2: better at batch classification + strict JSON output
+
+---
+
+## Undo (Best-effort) ↩️
+
+After Stage 2 finishes, AutoSniffer writes a journal:
+
+- 🗃️ Folder: `.autosniffer_history/`
+- 🧾 File: `<run_id>.json` (e.g. `20251220_153012.json`)
+
+Click **撤销上一次** to restore files based on the latest journal.
+
+### Conflict Handling ⚔️
+
+If a file already exists at the restore target location, AutoSniffer will **rename** the restoring file to keep both copies (suffix like `__undo_conflict`, plus an index if needed).
+
+### Limitations ⚠️
+
+- ⚠️ Undo is “best-effort”: if files were edited/renamed/moved manually after the run, some items may be skipped or fail.
+- ✅ Only files recorded as successfully moved (`status = moved`) are reversed.
+- 🧹 Stage 1 folders created by the run will be removed only if they are still empty.
+
+---
+
+## CLI Usage ⌨️
+
+The CLI (`main.py`) is mainly a demo and uses `DEFAULT_ROOT_PATH` from `src/config.py`.
+
+```bash
+python main.py
+```
+
+For most users, the GUI is recommended.
+
+---
+
+## Text Extraction Utility 📄
+
+`extract.py` can extract text from common document formats.
+
+Examples:
+
+```bash
+# single file
+python extract.py path\to\document.pdf
+
+# extract all supported files under a directory
+python extract.py --dir path\to\folder
+
+# batch mode
+python extract.py --batch a.docx b.pdf c.pptx
+```
+
+Outputs are saved under `extracted_texts/` by default for `--dir` mode.
+
+---
+
+## Troubleshooting 🩺
+
+### API Key missing
+
+- 🔑 Fill it in GUI Settings tab, or set `AUTOSNIFFER_API_KEY` / `DASHSCOPE_API_KEY`.
+
+### Model returns invalid JSON
+
+- 🤖 Try a more stable model.
+- 📦 Reduce batch size.
+
+### Some files not moved
+
+- 🔐 Check file permissions / 文件权限
+- 🔒 Check if file is in use / 文件是否被占用
+- 🧾 See the journal and undo report in `.autosniffer_history/`
+
+---
+
+## Disclaimer 📌
+
+This tool performs real file operations. AI classification is heuristic and may be wrong. Always test on a copy or use Undo immediately if needed.
