@@ -14,15 +14,15 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 
 ## Features ✨
 
-- Two-stage workflow
-	- Stage 1: only plans folders, then creates folders
-	- Stage 2: batch classification + move
-- GUI (Flet) with progress + stop
-- Best-effort Undo last run
-	- Uses a journal under `.autosniffer_history/`
-	- Conflict-safe renaming on restore
-- Optional text extraction tool
-	- Extract text from `pdf/docx/pptx/xlsx/txt/...` for inspection
+- 🧭 Two-stage workflow
+	- 🧱 Stage 1: only plans folders, then creates folders
+	- 📦 Stage 2: batch classification + move
+- 🖥️ GUI (Flet) with progress + stop
+- ↩️ Best-effort Undo last run
+	- 🧾 Uses a journal under `.autosniffer_history/`
+	- 🧷 Conflict-safe renaming on restore
+- 📄 Optional text extraction tool
+	- 🔎 Extract text from `pdf/docx/pptx/xlsx/txt/...` for inspection
 
 ---
 
@@ -39,8 +39,8 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 
 ## Requirements 🧰
 
-- Windows recommended
-- Python 3.9+ recommended
+- 🪟 Windows recommended
+- 🐍 Python 3.9+ recommended
 
 Install dependencies:
 
@@ -66,13 +66,13 @@ python ui_app.py
 
 In the GUI:
 
-1. Go to **Settings** and fill `API Key` (and `API Base URL` if needed)
-2. Go to the **Workflow** tab
-3. Choose a target folder, then click **Scan/Analyze** to preview the directory structure
-4. Stage 1: click **Generate folders**, optionally edit the folder list, then click **Create folders** (no files are moved)
-5. Stage 2: click **Batch move** to classify and move files (real moves)
+1. ⚙️ Go to **Settings** and fill `API Key` (and `API Base URL` if needed)
+2. 🗂️ Go to the **Workflow** tab
+3. 📁 Choose a target folder, then click **Scan/Analyze** to preview the directory structure
+4. 🧱 Stage 1: click **Generate folders**, optionally edit the folder list, then click **Create folders** (no files are moved)
+5. 📦 Stage 2: click **Batch move** to classify and move files (real moves)
 
-Tip: for important folders, test on a copy first.
+Tip: 🧪 for important folders, test on a copy first.
 
 ---
 
@@ -80,12 +80,14 @@ Tip: for important folders, test on a copy first.
 
 ### Environment Variables 🧾
 
-- `AUTOSNIFFER_API_KEY` (or `DASHSCOPE_API_KEY`)
-- `AUTOSNIFFER_API_BASE_URL`
+
+- 🔑 `AUTOSNIFFER_API_KEY` (or `DASHSCOPE_API_KEY`)
+- 🌐 `AUTOSNIFFER_API_BASE_URL`
 	- Default: `https://dashscope.aliyuncs.com/compatible-mode/v1`
-- `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
-- `AUTOSNIFFER_MODEL_NAME` (fallback model name)
-- `AUTOSNIFFER_STAGE2_BATCH_SIZE` (CLI only; GUI uses the field)
+
+- 🧠 `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
+- 🏷️ `AUTOSNIFFER_MODEL_NAME` (fallback model name)
+- 📦 `AUTOSNIFFER_STAGE2_BATCH_SIZE` (CLI only; GUI uses the field)
 
 ### Model Suggestions 🤖
 
@@ -98,8 +100,8 @@ Tip: for important folders, test on a copy first.
 
 After Stage 2 finishes, AutoSniffer writes a journal:
 
-- Folder: `.autosniffer_history/`
-- File: `<run_id>.json` (e.g. `20251220_153012.json`)
+- 🗃️ Folder: `.autosniffer_history/`
+- 🧾 File: `<run_id>.json` (e.g. `20251220_153012.json`)
 
 Click **撤销上一次** to restore files based on the latest journal.
 
@@ -109,9 +111,9 @@ If a file already exists at the restore target location, AutoSniffer will **rena
 
 ### Limitations ⚠️
 
-- Undo is “best-effort”: if files were edited/renamed/moved manually after the run, some items may be skipped or fail.
-- Only files recorded as successfully moved (`status = moved`) are reversed.
-- Stage 1 folders created by the run will be removed only if they are still empty.
+- ⚠️ Undo is “best-effort”: if files were edited/renamed/moved manually after the run, some items may be skipped or fail.
+- ✅ Only files recorded as successfully moved (`status = moved`) are reversed.
+- 🧹 Stage 1 folders created by the run will be removed only if they are still empty.
 
 ---
 
@@ -152,18 +154,18 @@ Outputs are saved under `extracted_texts/` by default for `--dir` mode.
 
 ### API Key missing
 
-- Fill it in GUI Settings tab, or set `AUTOSNIFFER_API_KEY` / `DASHSCOPE_API_KEY`.
+- 🔑 Fill it in GUI Settings tab, or set `AUTOSNIFFER_API_KEY` / `DASHSCOPE_API_KEY`.
 
 ### Model returns invalid JSON
 
-- Try a more stable model.
-- Reduce batch size.
+- 🤖 Try a more stable model.
+- 📦 Reduce batch size.
 
 ### Some files not moved
 
-- Check file permissions / 文件权限
-- Check if file is in use / 文件是否被占用
-- See the journal and undo report in `.autosniffer_history/`
+- 🔐 Check file permissions / 文件权限
+- 🔒 Check if file is in use / 文件是否被占用
+- 🧾 See the journal and undo report in `.autosniffer_history/`
 
 ---
 
@@ -181,15 +183,15 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 
 ## 功能 ✨
 
-- 两阶段流程
-	- 阶段1：仅规划分类目录并创建文件夹
-	- 阶段2：按批调用模型归类并移动文件
-- 图形界面（Flet）：进度展示、可停止
-- “撤销上一次”（尽量还原）
-	- 使用 `.autosniffer_history/` 日志
-	- 冲突时自动改名保留两份
-- 附带文本提取脚本
-	- 支持从 `pdf/docx/pptx/xlsx/txt/...` 提取文本便于查看
+- 🧭 两阶段流程
+	- 🧱 阶段1：仅规划分类目录并创建文件夹
+	- 📦 阶段2：按批调用模型归类并移动文件
+- 🖥️ 图形界面（Flet）：进度展示、可停止
+- ↩️ “撤销上一次”（尽量还原）
+	- 🧾 使用 `.autosniffer_history/` 日志
+	- 🧷 冲突时自动改名保留两份
+- 📄 附带文本提取脚本
+	- 🔎 支持从 `pdf/docx/pptx/xlsx/txt/...` 提取文本便于查看
 
 ---
 
@@ -206,8 +208,8 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 
 ## 环境依赖 🧰
 
-- 推荐 Windows（项目内的执行器与路径处理主要面向 Windows）
-- 推荐 Python 3.9+
+- 🪟 推荐 Windows（项目内的执行器与路径处理主要面向 Windows）
+- 🐍 推荐 Python 3.9+
 
 安装依赖：
 
@@ -233,13 +235,13 @@ python ui_app.py
 
 GUI 内操作：
 
-1. 打开 **设置**：填写 `API Key`（需要的话填写 `API Base URL`）
-2. 打开 **文件整理（整理流程）**
-3. 点击 **选择目录** → **分析目录**
-4. 阶段1：**阶段1：生成目录** →（可编辑目录列表）→ **阶段1：创建文件夹**
-5. 阶段2：**阶段2：批量移动**
+1. ⚙️ 打开 **设置**：填写 `API Key`（需要的话填写 `API Base URL`）
+2. 🗂️ 打开 **文件整理（整理流程）**
+3. 📁 点击 **选择目录** → **分析目录**
+4. 🧱 阶段1：**阶段1：生成目录** →（可编辑目录列表）→ **阶段1：创建文件夹**
+5. 📦 阶段2：**阶段2：批量移动**
 
-建议：第一次对重要目录操作前，先备份或在测试目录试跑。
+建议：🧪 第一次对重要目录操作前，先备份或在测试目录试跑。
 
 ---
 
@@ -247,12 +249,14 @@ GUI 内操作：
 
 ### 环境变量 🧾
 
-- `AUTOSNIFFER_API_KEY`（或 `DASHSCOPE_API_KEY`）
-- `AUTOSNIFFER_API_BASE_URL`
+
+- 🔑 `AUTOSNIFFER_API_KEY`（或 `DASHSCOPE_API_KEY`）
+- 🌐 `AUTOSNIFFER_API_BASE_URL`
 	- 默认：`https://dashscope.aliyuncs.com/compatible-mode/v1`
-- `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
-- `AUTOSNIFFER_MODEL_NAME`（兜底模型名）
-- `AUTOSNIFFER_STAGE2_BATCH_SIZE`（仅 CLI 使用；GUI 使用界面字段）
+
+- 🧠 `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
+- 🏷️ `AUTOSNIFFER_MODEL_NAME`（兜底模型名）
+- 📦 `AUTOSNIFFER_STAGE2_BATCH_SIZE`（仅 CLI 使用；GUI 使用界面字段）
 
 ### 模型建议 🤖
 
@@ -265,8 +269,8 @@ GUI 内操作：
 
 阶段2完成后会写入历史记录：
 
-- 目录：`.autosniffer_history/`
-- 文件：`<run_id>.json`（例如 `20251220_153012.json`）
+- 🗃️ 目录：`.autosniffer_history/`
+- 🧾 文件：`<run_id>.json`（例如 `20251220_153012.json`）
 
 点击 **撤销上一次** 会基于最近一次记录尝试把已移动文件移回原位置。
 
@@ -276,9 +280,9 @@ GUI 内操作：
 
 ### 注意事项 ⚠️
 
-- “撤销”是尽量还原：如果整理后文件被手动改名/移动/编辑，可能会跳过或失败。
-- 仅会撤销日志中记录为成功移动（`status = moved`）的条目。
-- 阶段1创建的文件夹仅在仍为空时才会自动删除。
+- ⚠️ “撤销”是尽量还原：如果整理后文件被手动改名/移动/编辑，可能会跳过或失败。
+- ✅ 仅会撤销日志中记录为成功移动（`status = moved`）的条目。
+- 🧹 阶段1创建的文件夹仅在仍为空时才会自动删除。
 
 ---
 
@@ -319,18 +323,18 @@ python extract.py --batch a.docx b.pdf c.pptx
 
 ### 未填写 API Key
 
-- 在 GUI 的“设置”页填写，或设置环境变量 `AUTOSNIFFER_API_KEY` / `DASHSCOPE_API_KEY`。
+- 🔑 在 GUI 的“设置”页填写，或设置环境变量 `AUTOSNIFFER_API_KEY` / `DASHSCOPE_API_KEY`。
 
 ### 模型输出不符合 JSON
 
-- 换更稳定的模型。
-- 调小批大小。
+- 🤖 换更稳定的模型。
+- 📦 调小批大小。
 
 ### 部分文件未移动
 
-- 检查文件权限。
-- 检查文件是否被占用。
-- 查看 `.autosniffer_history/` 内的日志与撤销报告。
+- 🔐 检查文件权限。
+- 🔒 检查文件是否被占用。
+- 🧾 查看 `.autosniffer_history/` 内的日志与撤销报告。
 
 ---
 
