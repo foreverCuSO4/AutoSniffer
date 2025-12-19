@@ -66,11 +66,11 @@ python ui_app.py
 
 In the GUI:
 
-1. Go to **Settings / 设置** and fill `API Key` (and `API Base URL` if needed)
-2. Go to **Workflow / 文件整理（整理流程）**
-3. Click **选择目录** → **分析目录**
-4. Stage 1: **阶段1：生成目录** → (optionally edit folder list) → **阶段1：创建文件夹**
-5. Stage 2: **阶段2：批量移动**
+1. Go to **Settings** and fill `API Key` (and `API Base URL` if needed)
+2. Go to the **Workflow** tab
+3. Choose a target folder, then click **Scan/Analyze** to preview the directory structure
+4. Stage 1: click **Generate folders**, optionally edit the folder list, then click **Create folders** (no files are moved)
+5. Stage 2: click **Batch move** to classify and move files (real moves)
 
 Tip: for important folders, test on a copy first.
 
