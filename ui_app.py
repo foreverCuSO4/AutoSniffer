@@ -29,6 +29,11 @@ def main(page: ft.Page):
     stop_event: Optional[threading.Event] = None
     last_created_folders: List[str] = []
 
+    ambiguous_files: List[Dict[str, Any]] = []
+    rename_preview_items: List[Dict[str, Any]] = []
+
+    is_busy_flag: bool = False
+
     def log(message: str):
         ts = datetime.now().strftime("%H:%M:%S")
         logs.controls.append(ft.Text(f"[{ts}] {message}", selectable=True))
@@ -92,22 +97,116 @@ def main(page: ft.Page):
         if not api_key:
             raise ValueError("API Key 为空：请在“设置”页中填写后再执行 AI 阶段。")
 
-    def set_busy(is_busy: bool):
-        pick_dir_btn.disabled = is_busy
-        scan_btn.disabled = is_busy
-        plan_folders_btn.disabled = is_busy
-        create_folders_btn.disabled = is_busy
-        start_stage2_btn.disabled = is_busy
-        stop_btn.disabled = not is_busy
-        timeout_field.disabled = is_busy
-        folders_field.disabled = is_busy
-        api_key_field.disabled = is_busy
-        base_url_field.disabled = is_busy
-        stage1_model_field.disabled = is_busy
-        stage2_model_field.disabled = is_busy
-        batch_size_field.disabled = is_busy
-        progress.visible = is_busy
+    def _api_key_present() -> bool:
+        return bool((api_key_field.value or "").strip())
+
+    def _root_path_for_workflow() -> str:
+        return (root_path_field.value or "").strip()
+
+    def _root_path_for_rename() -> str:
+        return (root_path_field_rename.value or root_path_field.value or "").strip()
+
+    def _has_scan_results() -> bool:
+        return bool(structure_obj is not None and (directory_json_text or "").strip())
+
+    def _folders_exist_on_disk(root_path: str, folder_names: List[str]) -> bool:
+        if not root_path or not folder_names:
+            return False
+        for name in folder_names:
+            if not os.path.isdir(os.path.join(root_path, name)):
+                return False
+        return True
+
+    def refresh_action_states():
+        """Enable/disable buttons based on user progress to reduce confusion."""
+        busy = bool(is_busy_flag)
+
+        workflow_root = _root_path_for_workflow()
+        rename_root = _root_path_for_rename()
+        scanned = _has_scan_results()
+        api_ok = _api_key_present()
+        current_folders = _folders_from_field()
+        folders_ok = bool(current_folders)
+        folders_exist = _folders_exist_on_disk(workflow_root, current_folders)
+
+        # --- File organizing tab (4 main buttons) ---
+        scan_btn.disabled = busy or (not workflow_root)
+        scan_btn.tooltip = "请先选择目标目录" if (not workflow_root) else "分析目标目录结构"
+
+        plan_folders_btn.disabled = busy or (not scanned) or (not api_ok)
+        if not scanned:
+            plan_folders_btn.tooltip = "请先点击“分析目录”"
+        elif not api_ok:
+            plan_folders_btn.tooltip = "请先在“设置”页填写 API Key"
+        else:
+            plan_folders_btn.tooltip = "根据目录结构生成分类文件夹列表"
+
+        create_folders_btn.disabled = busy or (not scanned) or (not folders_ok) or (not workflow_root)
+        if not scanned:
+            create_folders_btn.tooltip = "请先点击“分析目录”"
+        elif not folders_ok:
+            create_folders_btn.tooltip = "请先生成/填写分类文件夹列表"
+        else:
+            create_folders_btn.tooltip = "在目标目录中创建分类文件夹（不移动文件）"
+
+        stage2_ready = scanned and api_ok and folders_ok and bool(workflow_root) and folders_exist
+        start_stage2_btn.disabled = busy or (not stage2_ready)
+        if not scanned:
+            start_stage2_btn.tooltip = "请先点击“分析目录”"
+        elif not api_ok:
+            start_stage2_btn.tooltip = "请先在“设置”页填写 API Key"
+        elif not folders_ok:
+            start_stage2_btn.tooltip = "请先生成/填写分类文件夹列表"
+        elif not folders_exist:
+            start_stage2_btn.tooltip = "请先点击“创建文件夹”，或确保目标分类文件夹已存在"
+        else:
+            start_stage2_btn.tooltip = "按批调用 AI 并实际移动文件"
+
+        # --- Rename tab actions ---
+        scan_btn_rename.disabled = busy or (not rename_root)
+        scan_btn_rename.tooltip = "请先选择目标目录" if (not rename_root) else "分析目标目录结构"
+
+        detect_ambiguous_btn.disabled = busy or (not scanned) or (not api_ok)
+        if not scanned:
+            detect_ambiguous_btn.tooltip = "请先点击“分析目录”"
+        elif not api_ok:
+            detect_ambiguous_btn.tooltip = "请先在“设置”页填写 API Key"
+        else:
+            detect_ambiguous_btn.tooltip = "让 AI 找出命名模糊的文件"
+
+        build_rename_preview_btn.disabled = busy or (not scanned) or (not api_ok) or (not ambiguous_files)
+        if not scanned:
+            build_rename_preview_btn.tooltip = "请先点击“分析目录”"
+        elif not api_ok:
+            build_rename_preview_btn.tooltip = "请先在“设置”页填写 API Key"
+        elif not ambiguous_files:
+            build_rename_preview_btn.tooltip = "请先点击“识别命名模糊文件”"
+        else:
+            build_rename_preview_btn.tooltip = "提取内容并生成新名前缀预览"
+
+        apply_rename_btn.disabled = busy or (not rename_preview_items)
+        apply_rename_btn.tooltip = "请先生成重命名预览" if (not rename_preview_items) else "执行重命名（会实际修改文件名）"
+
+        stop_btn.disabled = not busy
         page.update()
+
+    def set_busy(is_busy: bool):
+        nonlocal is_busy_flag
+        is_busy_flag = bool(is_busy)
+
+        pick_dir_btn.disabled = is_busy_flag
+        pick_dir_btn_rename.disabled = is_busy_flag
+
+        timeout_field.disabled = is_busy_flag
+        folders_field.disabled = is_busy_flag
+        api_key_field.disabled = is_busy_flag
+        base_url_field.disabled = is_busy_flag
+        stage1_model_field.disabled = is_busy_flag
+        stage2_model_field.disabled = is_busy_flag
+        batch_size_field.disabled = is_busy_flag
+        progress.visible = is_busy_flag
+
+        refresh_action_states()
 
     def ensure_workflow() -> OrganizerWorkflow:
         nonlocal workflow
@@ -148,12 +247,16 @@ def main(page: ft.Page):
         stop_btn.disabled = True
         page.update()
 
+    def _set_root_path(path: str):
+        root_path_field.value = path
+        root_path_field_rename.value = path
+        refresh_action_states()
+
     def on_pick_directory_result(e: ft.FilePickerResultEvent):
         if not e.path:
             return
-        root_path_field.value = e.path
+        _set_root_path(e.path)
         log(f"已选择目录: {e.path}")
-        page.update()
 
     picker = ft.FilePicker(on_result=on_pick_directory_result)
     page.overlay.append(picker)
@@ -165,13 +268,34 @@ def main(page: ft.Page):
         expand=True,
     )
 
+    root_path_field_rename = ft.TextField(
+        label="目标目录",
+        hint_text="请选择要处理的文件夹",
+        read_only=True,
+        expand=True,
+    )
+
     pick_dir_btn = ft.ElevatedButton(
         "选择目录",
         icon=ft.Icons.FOLDER_OPEN,
         on_click=lambda _: picker.get_directory_path(dialog_title="选择要整理的目录"),
     )
 
+    pick_dir_btn_rename = ft.ElevatedButton(
+        "选择目录",
+        icon=ft.Icons.FOLDER_OPEN,
+        on_click=lambda _: picker.get_directory_path(dialog_title="选择要重命名的目录"),
+    )
+
     structure_preview = ft.TextField(
+        label="目录结构（JSON预览）",
+        multiline=True,
+        min_lines=6,
+        max_lines=8,
+        read_only=True,
+    )
+
+    structure_preview_rename = ft.TextField(
         label="目录结构（JSON预览）",
         multiline=True,
         min_lines=6,
@@ -251,10 +375,28 @@ def main(page: ft.Page):
         input_filter=ft.NumbersOnlyInputFilter(),
     )
 
+    organize_requirements_field = ft.TextField(
+        label="个性化要求（可选）",
+        hint_text="例如：优先按项目/客户分类；图片按拍摄地点；不要创建过多分类等",
+        multiline=True,
+        min_lines=2,
+        max_lines=3,
+        value="",
+    )
+
+    rename_requirements_field = ft.TextField(
+        label="个性化要求（可选）",
+        hint_text="例如：前缀用英文；尽量短；包含日期；避免敏感词等",
+        multiline=True,
+        min_lines=2,
+        max_lines=3,
+        value="",
+    )
+
     def do_scan():
         nonlocal directory_json_text, structure_obj, files
         try:
-            root_path = root_path_field.value or ""
+            root_path = root_path_field.value or root_path_field_rename.value or ""
             wf = ensure_workflow()
             if should_stop():
                 log("已停止")
@@ -267,6 +409,7 @@ def main(page: ft.Page):
             structure_obj = structure
             directory_json_text = wf.format_structure_json(structure)
             structure_preview.value = directory_json_text
+            structure_preview_rename.value = directory_json_text
             files = wf.flatten_files(structure)
             stage2_progress.value = 0
             stage2_progress_text.value = f"待处理文件数：{len(files)}"
@@ -278,12 +421,15 @@ def main(page: ft.Page):
             set_busy(False)
 
     def on_scan_click(_):
-        if not root_path_field.value:
+        if not (root_path_field.value or root_path_field_rename.value):
             log("请先选择目录")
             return
         set_busy(True)
         new_stop_event()
         threading.Thread(target=do_scan, daemon=True).start()
+
+    def on_scan_click_rename(_):
+        on_scan_click(_)
 
     def _folders_from_field() -> List[str]:
         lines = (folders_field.value or "").splitlines()
@@ -303,7 +449,7 @@ def main(page: ft.Page):
         wf = ensure_workflow()
         current_folders = _folders_from_field()
         mkdir_script_preview.value = wf.build_mkdir_script(current_folders) if current_folders else ""
-        page.update()
+        refresh_action_states()
 
     def do_plan_folders():
         nonlocal folders
@@ -316,7 +462,11 @@ def main(page: ft.Page):
                 log("已停止")
                 return
             log("阶段1：请求 AI 生成目标分类目录...")
-            folders = wf.stage1_plan_folders(directory_json_text, model=(stage1_model_field.value or "").strip())
+            folders = wf.stage1_plan_folders(
+                directory_json_text,
+                model=(stage1_model_field.value or "").strip(),
+                user_requirements=(organize_requirements_field.value or "").strip() or None,
+            )
             if should_stop():
                 log("已停止")
                 return
@@ -432,6 +582,7 @@ def main(page: ft.Page):
                     batch,
                     current_folders,
                     model=(stage2_model_field.value or "").strip(),
+                    user_requirements=(organize_requirements_field.value or "").strip() or None,
                 )
 
                 if should_stop():
@@ -452,11 +603,16 @@ def main(page: ft.Page):
                 stage2_progress_text.value = f"已处理：{done}/{total}"
                 page.update()
 
-            # Persist journal for Undo.
+            # Cleanup empty folders and persist journal for Undo.
+            deleted_empty_folders = wf.cleanup_empty_folders(root_path)
+            if deleted_empty_folders:
+                log(f"阶段2：已清理空文件夹 {len(deleted_empty_folders)} 个")
+
             journal = {
                 "id": run_id,
                 "created_folders": list(last_created_folders or []),
                 "moves": journal_moves,
+                "deleted_empty_folders": deleted_empty_folders,
             }
             journal_path = wf.write_journal(root_path, journal)
             log(f"阶段2：已写入历史记录：{journal_path}")
@@ -505,9 +661,232 @@ def main(page: ft.Page):
         page.open(confirm_dialog)
 
     scan_btn = ft.FilledButton("分析目录", icon=ft.Icons.SEARCH, on_click=on_scan_click)
-    plan_folders_btn = ft.FilledButton("阶段1：生成目录", icon=ft.Icons.AUTO_AWESOME, on_click=on_plan_folders_click)
-    create_folders_btn = ft.FilledButton("阶段1：创建文件夹", icon=ft.Icons.CREATE_NEW_FOLDER, on_click=on_create_folders_click)
-    start_stage2_btn = ft.FilledButton("阶段2：批量移动", icon=ft.Icons.DRIVE_FILE_MOVE, on_click=on_start_stage2_click)
+    scan_btn_rename = ft.FilledButton("分析目录", icon=ft.Icons.SEARCH, on_click=on_scan_click_rename)
+    plan_folders_btn = ft.FilledButton("生成目录", icon=ft.Icons.AUTO_AWESOME, on_click=on_plan_folders_click)
+    create_folders_btn = ft.FilledButton("创建文件夹", icon=ft.Icons.CREATE_NEW_FOLDER, on_click=on_create_folders_click)
+    start_stage2_btn = ft.FilledButton("批量移动", icon=ft.Icons.DRIVE_FILE_MOVE, on_click=on_start_stage2_click)
+
+    # --- Smart Rename UI actions ---
+
+    ambiguous_list = ft.TextField(
+        label="AI 判定为“命名模糊”的文件（relative_path）",
+        multiline=True,
+        min_lines=6,
+        max_lines=10,
+        read_only=True,
+        value="",
+    )
+
+    rename_preview = ft.TextField(
+        label="重命名预览（new_prefix_original）",
+        multiline=True,
+        min_lines=6,
+        max_lines=12,
+        read_only=True,
+        value="",
+    )
+
+    rename_progress = ft.ProgressBar(value=0)
+    rename_progress_text = ft.Text("等待开始")
+
+    def do_detect_ambiguous():
+        nonlocal ambiguous_files
+        try:
+            wf = ensure_workflow()
+            if not directory_json_text.strip():
+                raise ValueError("请先点击“分析目录”")
+            require_api_key()
+            if should_stop():
+                log("已停止")
+                return
+            log("智能重命名：请求 AI 判断命名模糊的文件...")
+            items = wf.rename_detect_ambiguous(
+                directory_json_text,
+                model=(stage2_model_field.value or "").strip(),
+                user_requirements=(rename_requirements_field.value or "").strip() or None,
+            )
+            ambiguous_files = items
+            lines: List[str] = []
+            for it in items:
+                rp = str(it.get("relative_path") or "")
+                reason = str(it.get("reason") or "")
+                if reason:
+                    lines.append(f"{rp}  # {reason}")
+                else:
+                    lines.append(rp)
+            ambiguous_list.value = "\n".join(lines)
+            log(f"智能重命名：已识别 {len(items)} 个命名模糊文件")
+            if not items:
+                show_info("未发现需要智能重命名的文件")
+        except Exception as ex:
+            log(f"智能重命名：识别失败: {ex}")
+            show_error(str(ex), title="智能重命名：识别失败")
+        finally:
+            set_busy(False)
+
+    def on_detect_ambiguous_click(_):
+        set_busy(True)
+        new_stop_event()
+        threading.Thread(target=do_detect_ambiguous, daemon=True).start()
+
+    def do_build_rename_preview():
+        nonlocal rename_preview_items
+        try:
+            wf = ensure_workflow()
+            root_path = root_path_field_rename.value or root_path_field.value or ""
+            if not root_path:
+                raise ValueError("请先选择目录")
+            if structure_obj is None or not directory_json_text.strip():
+                raise ValueError("请先分析目录")
+            require_api_key()
+            if not ambiguous_files:
+                raise ValueError("请先点击“识别命名模糊文件”")
+
+            # Map relative_path -> file_item
+            all_files = wf.flatten_files(structure_obj)
+            by_rel = {str(f.get("relative_path") or ""): f for f in all_files}
+
+            targets: List[Dict[str, Any]] = []
+            for it in ambiguous_files:
+                rp = str(it.get("relative_path") or "")
+                fi = by_rel.get(rp)
+                if fi:
+                    targets.append(fi)
+
+            if not targets:
+                raise ValueError("未找到可处理的目标文件（relative_path 不匹配）")
+
+            rename_preview_items = []
+            rename_progress.value = 0
+            rename_progress_text.value = f"准备开始：0/{len(targets)}"
+            page.update()
+
+            lines: List[str] = []
+            total = len(targets)
+            done = 0
+            log(f"智能重命名：开始提取内容并生成新名前缀（共 {total} 个文件）...")
+            for fi in targets:
+                if should_stop():
+                    log("智能重命名：已停止")
+                    return
+
+                rp = str(fi.get("relative_path") or "")
+                name = str(fi.get("name") or "")
+                rename_progress_text.value = f"处理中：{done}/{total}"
+                page.update()
+
+                snippet = wf.rename_extract_content(root_path, rp)
+                if not snippet.strip():
+                    prefix = "内容为空"
+                else:
+                    prefix = wf.rename_suggest_prefix(
+                        fi,
+                        snippet,
+                        model=(stage2_model_field.value or "").strip(),
+                        user_requirements=(rename_requirements_field.value or "").strip() or None,
+                    )
+                    if not prefix:
+                        prefix = "未命名"
+
+                new_name = f"{prefix}_{name}"
+                lines.append(f"{rp}  ->  {new_name}")
+                rename_preview_items.append({"relative_path": rp, "prefix": prefix, "old_name": name, "new_name": new_name})
+
+                done += 1
+                rename_progress.value = done / total if total else 0
+                rename_progress_text.value = f"已生成预览：{done}/{total}"
+                page.update()
+
+            rename_preview.value = "\n".join(lines)
+            log("智能重命名：预览生成完成")
+            show_info("智能重命名：已生成重命名预览")
+        except Exception as ex:
+            log(f"智能重命名：预览失败: {ex}")
+            show_error(str(ex), title="智能重命名：预览失败")
+        finally:
+            set_busy(False)
+
+    def on_build_rename_preview_click(_):
+        set_busy(True)
+        new_stop_event()
+        threading.Thread(target=do_build_rename_preview, daemon=True).start()
+
+    def do_apply_rename():
+        try:
+            wf = ensure_workflow()
+            root_path = root_path_field_rename.value or root_path_field.value or ""
+            if not root_path:
+                raise ValueError("请先选择目录")
+            if not rename_preview_items:
+                raise ValueError("请先生成重命名预览")
+
+            total = len(rename_preview_items)
+            done = 0
+            ok = 0
+            failed = 0
+            conflict = 0
+            rename_progress.value = 0
+            rename_progress_text.value = f"准备开始：0/{total}"
+            page.update()
+
+            log(f"智能重命名：开始执行重命名（共 {total} 个文件）...")
+            for it in rename_preview_items:
+                if should_stop():
+                    log("智能重命名：已停止")
+                    return
+                rp = str(it.get("relative_path") or "")
+                prefix = str(it.get("prefix") or "")
+                res = wf.rename_apply_prefix(root_path, rp, prefix)
+                if res.get("status") == "renamed":
+                    ok += 1
+                    if res.get("conflict"):
+                        conflict += 1
+                elif res.get("status") == "failed":
+                    failed += 1
+                    logs.controls.append(ft.Text(f"[重命名失败] {rp}: {res.get('error')}", selectable=True, color=ft.Colors.RED))
+                done += 1
+                rename_progress.value = done / total if total else 0
+                rename_progress_text.value = f"已处理：{done}/{total}"
+                page.update()
+
+            log(f"智能重命名：完成。成功 {ok}，失败 {failed}，冲突改名 {conflict}")
+            show_info("智能重命名：执行完成（详情见日志）")
+        except Exception as ex:
+            log(f"智能重命名：执行失败: {ex}")
+            show_error(str(ex), title="智能重命名：执行失败")
+        finally:
+            set_busy(False)
+
+    def on_apply_rename_click(_):
+        if not rename_preview_items:
+            log("请先生成重命名预览")
+            return
+
+        def close_dialog(e):
+            confirm_dialog.open = False
+            page.update()
+
+        def run_after_confirm(e):
+            confirm_dialog.open = False
+            page.update()
+            set_busy(True)
+            new_stop_event()
+            threading.Thread(target=do_apply_rename, daemon=True).start()
+
+        confirm_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("确认执行智能重命名"),
+            content=ft.Text("将把 AI 生成的新名前缀添加到原文件名前（prefix_original）。会实际重命名文件。"),
+            actions=[
+                ft.TextButton("取消", on_click=close_dialog),
+                ft.FilledButton("开始重命名", on_click=run_after_confirm),
+            ],
+        )
+        page.open(confirm_dialog)
+
+    detect_ambiguous_btn = ft.FilledButton("识别命名模糊文件", icon=ft.Icons.PSYCHOLOGY, on_click=on_detect_ambiguous_click)
+    build_rename_preview_btn = ft.FilledButton("生成重命名预览", icon=ft.Icons.FIND_REPLACE, on_click=on_build_rename_preview_click)
+    apply_rename_btn = ft.FilledButton("执行重命名", icon=ft.Icons.DRIVE_FILE_RENAME_OUTLINE, on_click=on_apply_rename_click)
 
     def do_undo_last():
         try:
@@ -603,9 +982,9 @@ def main(page: ft.Page):
         show_dialog(
             "使用流程：\n"
             "1) 在“文件整理”页选择目标目录并点击‘分析目录’\n"
-            "2) 点击‘阶段1：生成目录’，确认/编辑目录列表\n"
-            "3) 点击‘阶段1：创建文件夹’（只创建，不移动）\n"
-            "4) 点击‘阶段2：批量移动’（按批调用 AI 并实际移动文件）\n"
+            "2) 点击‘生成目录’，确认/编辑目录列表\n"
+            "3) 点击‘创建文件夹’（只创建，不移动）\n"
+            "4) 点击‘批量移动’（按批调用 AI 并实际移动文件）\n"
             "5) 需要中断可点右上角‘停止’\n\n"
             "配置说明：请在“设置”页填写 API Key、Base URL（可选）、模型、批大小与超时。",
             title="使用指引",
@@ -614,7 +993,11 @@ def main(page: ft.Page):
     def on_folders_change(_):
         _update_mkdir_preview()
 
+    def on_api_key_change(_):
+        refresh_action_states()
+
     folders_field.on_change = on_folders_change
+    api_key_field.on_change = on_api_key_change
 
     stage1_view = ft.Column(
         controls=[
@@ -663,6 +1046,7 @@ def main(page: ft.Page):
             ft.Text("步骤 1：选择目录并分析", weight=ft.FontWeight.BOLD),
             top_controls,
             actions_row,
+            organize_requirements_field,
             structure_preview,
             ft.Container(
                 content=stage2_view,
@@ -750,15 +1134,75 @@ def main(page: ft.Page):
         ),
     )
 
+    # --- Smart Rename tab ---
+
+    rename_top_controls = ft.Row(
+        controls=[root_path_field_rename, pick_dir_btn_rename],
+        spacing=12,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    rename_actions_row = ft.Row(
+        controls=[scan_btn_rename, detect_ambiguous_btn, build_rename_preview_btn, apply_rename_btn],
+        spacing=10,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        wrap=True,
+    )
+
+    rename_tab = ft.Tab(
+        text="智能重命名",
+        content=ft.Column(
+            controls=[
+                ft.Text("智能重命名", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    "流程：分析目录 → AI 识别命名模糊文件 → 提取内容 → AI 生成新名前缀 → 以 prefix_original 方式重命名。",
+                    size=12,
+                    color=ft.Colors.GREY_700,
+                ),
+                rename_top_controls,
+                rename_actions_row,
+                rename_requirements_field,
+                structure_preview_rename,
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Text("进度"),
+                            rename_progress,
+                            rename_progress_text,
+                        ],
+                        spacing=8,
+                    ),
+                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border_radius=8,
+                    padding=10,
+                ),
+                ambiguous_list,
+                rename_preview,
+                ft.Text("运行日志（与整理流程共用）", weight=ft.FontWeight.BOLD),
+                ft.Container(
+                    content=logs,
+                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border_radius=8,
+                    padding=10,
+                    expand=True,
+                ),
+            ],
+            spacing=12,
+            expand=True,
+            scroll=ft.ScrollMode.AUTO,
+        ),
+    )
+
     page.add(
         header,
         ft.Tabs(
             selected_index=0,
-            tabs=[workflow_tab, settings_tab],
+            tabs=[workflow_tab, rename_tab, settings_tab],
             expand=True,
         ),
     )
 
+    refresh_action_states()
     log("就绪：请选择要整理的目录")
 
 

@@ -58,6 +58,9 @@ for %%f in (*.*) do if /i not "%%~xf"==".bat" move "%%f" "其他\" >nul 2>nul
 SYSTEM_PROMPT_STAGE1_FOLDERS = """
 你是一位文件整理专家。你将收到一个目录结构的 JSON（含文件与子目录信息）。
 
+个性化要求（可选；如果为空请忽略）：
+<<USER_REQUIREMENTS>>
+
 任务（阶段 1）：
 1) 仅规划“目标分类目录结构”（也就是需要创建的文件夹列表）。
 2) 不要输出任何移动文件、复制文件、删除文件相关内容。
@@ -79,6 +82,9 @@ SYSTEM_PROMPT_STAGE1_FOLDERS = """
 SYSTEM_PROMPT_STAGE2_DESTINATION = """
 你是一位文件整理专家。现在进入阶段 2：对单个文件进行归类。
 
+个性化要求（可选；如果为空请忽略）：
+<<USER_REQUIREMENTS>>
+
 你将收到一个 JSON，包含：
 - allowed_folders：允许的目标文件夹列表（阶段 1 已创建）
 - file：当前需要移动的文件信息（相对路径、文件名、扩展名、元数据等）
@@ -99,6 +105,9 @@ SYSTEM_PROMPT_STAGE2_DESTINATION = """
 SYSTEM_PROMPT_STAGE2_BATCH_DESTINATION = """
 你是一位文件整理专家。现在进入阶段 2（批处理）：对一批文件进行归类。
 
+个性化要求（可选；如果为空请忽略）：
+<<USER_REQUIREMENTS>>
+
 你将收到一个 JSON，包含：
 - allowed_folders：允许的目标文件夹列表（阶段1已创建）
 - files：需要归类的一批文件信息数组（每个元素包含 relative_path/name/extension/metadata 等）
@@ -113,4 +122,55 @@ SYSTEM_PROMPT_STAGE2_BATCH_DESTINATION = """
 - assignments 的长度必须与输入 files 的长度相同，且顺序必须与 files 完全一致。
 - destination 必须与 allowed_folders 中某一项完全一致；无法判断则输出 "其他"。
 - 不要输出命令行脚本，不要解释原因，不要输出 markdown。
+"""
+
+
+# --- Smart Rename prompts ---
+
+SYSTEM_PROMPT_RENAME_DETECT_AMBIGUOUS = """
+你是一位文件整理与命名专家。你将收到一个目录结构的 JSON（包含文件与子目录，文件节点包含 relative_path/name/extension/metadata）。
+
+个性化要求（可选；如果为空请忽略）：
+<<USER_REQUIREMENTS>>
+
+任务：
+从中找出“文件名含糊不清、仅凭文件名难以判断内容/用途、影响分类”的文件。
+
+判定为“命名模糊”的常见特征（举例，不限于）：
+- 只有数字或短编号：1.pdf / 2023-01.docx
+- 只有日期或无语义：IMG_1234.jpg / 新建文本文档.txt
+- 只有“最终版/修订版/备份”等但不含主题：final.docx / 备份(2).xlsx
+- 过于泛化：资料.docx / 文档.pdf / 说明.pptx
+
+输出要求（必须严格遵守）：
+- 只输出一个 JSON 对象，不能包含任何额外文本。
+- JSON 结构固定为：
+	{"ambiguous_files": [{"relative_path": "...", "reason": "..."}, ...]}
+- relative_path 必须来自输入 JSON 的文件节点（与输入完全一致）。
+- reason 用一句话简短说明为什么模糊。
+- 数量建议控制在 5~30 个；如果没有，输出空数组。
+- 不要输出 markdown。
+"""
+
+
+SYSTEM_PROMPT_RENAME_SUGGEST_PREFIX = """
+你是一位文件命名专家。你将收到一个 JSON，包含：
+- file：文件信息（name/relative_path/extension）
+- content_snippet：从文件中提取的文本片段（可能被截断）
+
+个性化要求（可选；如果为空请忽略）：
+<<USER_REQUIREMENTS>>
+
+任务：
+根据 content_snippet 的主题，为该文件生成一个“简短、信息密度高、可读”的中文或英文标题前缀，用于添加到原文件名前。
+
+输出要求（必须严格遵守）：
+- 只输出一个 JSON 对象，不能包含任何额外文本。
+- JSON 结构固定为：{"prefix": "..."}
+
+命名约束：
+- prefix 只作为“前缀”，不要包含文件扩展名。
+- prefix 不要包含路径分隔符（/ \\），不要包含 Windows 不允许的字符：<>:"/\\|?*。
+- prefix 建议 6~24 个字符（中文算 1 个字符），尽量避免过长。
+- 不要输出引号外的解释、不输出 markdown。
 """

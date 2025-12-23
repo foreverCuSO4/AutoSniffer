@@ -6,6 +6,8 @@ from openai import OpenAI
 from . import config
 
 class AIService:
+    USER_REQUIREMENTS_TOKEN = "<<USER_REQUIREMENTS>>"
+
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self._api_key = (api_key or config.API_KEY or "").strip()
         self._base_url = (base_url or config.API_BASE_URL or "").strip()
@@ -15,12 +17,43 @@ class AIService:
             base_url=self._base_url,
         )
 
-    def _chat(self, system_prompt: str, user_content: str, model: Optional[str] = None) -> str:
+    @staticmethod
+    def _normalize_user_requirements(text: Optional[str], *, max_len: int = 800) -> str:
+        s = (text or "").strip()
+        if not s:
+            return ""
+        # collapse whitespace
+        s = " ".join(s.split())
+        if len(s) > max_len:
+            s = s[:max_len].rstrip()
+        return s
+
+    def _apply_user_requirements(self, system_prompt: str, user_requirements: Optional[str]) -> str:
+        prompt = system_prompt or ""
+        req = self._normalize_user_requirements(user_requirements)
+        # Keep the placeholder even if empty so templates remain stable.
+        replacement = req if req else "（无）"
+        if self.USER_REQUIREMENTS_TOKEN in prompt:
+            return prompt.replace(self.USER_REQUIREMENTS_TOKEN, replacement)
+        # Backward-compatible fallback if template doesn't include token.
+        if req:
+            return prompt + "\n\n个性化要求：\n" + req + "\n"
+        return prompt
+
+    def _chat(
+        self,
+        system_prompt: str,
+        user_content: str,
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> str:
         if not self._api_key:
             raise ValueError("未配置 API Key。请在 UI 中填写，或设置环境变量 AUTOSNIFFER_API_KEY/DASHSCOPE_API_KEY。")
         model_to_use = (model or config.MODEL_NAME or "").strip()
         if not model_to_use:
             raise ValueError("未配置模型名称")
+        system_prompt = self._apply_user_requirements(system_prompt, user_requirements)
         try:
             completion = self.client.chat.completions.create(
                 model=model_to_use,
@@ -50,9 +83,20 @@ class AIService:
                 return json.loads(text[start : end + 1])
             raise
 
-    def get_folder_plan_stage1(self, directory_json: str, model: Optional[str] = None) -> List[str]:
+    def get_folder_plan_stage1(
+        self,
+        directory_json: str,
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> List[str]:
         """Stage 1: return folder list to create."""
-        raw = self._chat(config.SYSTEM_PROMPT_STAGE1_FOLDERS, directory_json, model=model or config.MODEL_NAME_STAGE1)
+        raw = self._chat(
+            config.SYSTEM_PROMPT_STAGE1_FOLDERS,
+            directory_json,
+            model=model or config.MODEL_NAME_STAGE1,
+            user_requirements=user_requirements,
+        )
         obj = self._parse_json_object(raw)
         folders = obj.get("folders")
         if not isinstance(folders, list) or not all(isinstance(x, str) and x.strip() for x in folders):
@@ -70,12 +114,19 @@ class AIService:
             normalized.append("其他")
         return normalized
 
-    def choose_destination_stage2(self, payload: Dict[str, Any], model: Optional[str] = None) -> str:
+    def choose_destination_stage2(
+        self,
+        payload: Dict[str, Any],
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> str:
         """Stage 2: choose destination folder for a single file."""
         raw = self._chat(
             config.SYSTEM_PROMPT_STAGE2_DESTINATION,
             json.dumps(payload, ensure_ascii=False),
             model=model or config.MODEL_NAME_STAGE2,
+            user_requirements=user_requirements,
         )
         obj = self._parse_json_object(raw)
         dest = obj.get("destination")
@@ -83,12 +134,19 @@ class AIService:
             raise ValueError("阶段2返回格式错误：缺少 destination")
         return dest.strip()
 
-    def choose_destinations_batch_stage2(self, payload: Dict[str, Any], model: Optional[str] = None) -> List[Dict[str, str]]:
+    def choose_destinations_batch_stage2(
+        self,
+        payload: Dict[str, Any],
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
         """Stage 2 (batch): returns list of {relative_path, destination} in the same order as input files."""
         raw = self._chat(
             config.SYSTEM_PROMPT_STAGE2_BATCH_DESTINATION,
             json.dumps(payload, ensure_ascii=False),
             model=model or config.MODEL_NAME_STAGE2,
+            user_requirements=user_requirements,
         )
         obj = self._parse_json_object(raw)
         assignments = obj.get("assignments")
@@ -103,6 +161,58 @@ class AIService:
             dst = str(a.get("destination") or "")
             cleaned.append({"relative_path": rp, "destination": dst})
         return cleaned
+
+    # --- Smart Rename ---
+
+    def detect_ambiguous_files_for_rename(
+        self,
+        directory_json: str,
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        """Given directory JSON, return a list of ambiguous files: [{relative_path, reason}]."""
+        raw = self._chat(
+            config.SYSTEM_PROMPT_RENAME_DETECT_AMBIGUOUS,
+            directory_json,
+            model=model or config.MODEL_NAME_STAGE2,
+            user_requirements=user_requirements,
+        )
+        obj = self._parse_json_object(raw)
+        items = obj.get("ambiguous_files")
+        if not isinstance(items, list):
+            raise ValueError("智能重命名返回格式错误：缺少 ambiguous_files 数组")
+
+        cleaned: List[Dict[str, str]] = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            rp = str(it.get("relative_path") or "").strip()
+            reason = str(it.get("reason") or "").strip()
+            if not rp:
+                continue
+            cleaned.append({"relative_path": rp, "reason": reason})
+        return cleaned
+
+    def suggest_prefix_for_rename(
+        self,
+        payload: Dict[str, Any],
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> str:
+        """Given file info + extracted content snippet, return a short rename prefix string."""
+        raw = self._chat(
+            config.SYSTEM_PROMPT_RENAME_SUGGEST_PREFIX,
+            json.dumps(payload, ensure_ascii=False),
+            model=model or config.MODEL_NAME_STAGE2,
+            user_requirements=user_requirements,
+        )
+        obj = self._parse_json_object(raw)
+        prefix = obj.get("prefix")
+        if not isinstance(prefix, str) or not prefix.strip():
+            raise ValueError("智能重命名返回格式错误：缺少 prefix")
+        return prefix.strip()
 
     def get_organization_plan(self, directory_json):
         """

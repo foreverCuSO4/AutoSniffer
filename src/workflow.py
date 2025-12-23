@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from extract import extract_text_from_file
+
 from . import file_ops
 from .ai_service import AIService
 from . import cmd_executor
@@ -59,8 +61,14 @@ class OrganizerWorkflow:
 
     # --- Two-stage pipeline ---
 
-    def stage1_plan_folders(self, directory_json: str, model: Optional[str] = None) -> List[str]:
-        return self._ai_service.get_folder_plan_stage1(directory_json, model=model)
+    def stage1_plan_folders(
+        self,
+        directory_json: str,
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> List[str]:
+        return self._ai_service.get_folder_plan_stage1(directory_json, model=model, user_requirements=user_requirements)
 
     @staticmethod
     def build_mkdir_script(folders: List[str]) -> str:
@@ -102,12 +110,19 @@ class OrganizerWorkflow:
         files.sort(key=lambda x: str(x.get("relative_path") or ""))
         return files
 
-    def stage2_choose_destination(self, file_item: Dict[str, Any], allowed_folders: List[str], model: Optional[str] = None) -> str:
+    def stage2_choose_destination(
+        self,
+        file_item: Dict[str, Any],
+        allowed_folders: List[str],
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> str:
         payload = {
             "allowed_folders": allowed_folders,
             "file": file_item,
         }
-        dest = self._ai_service.choose_destination_stage2(payload, model=model)
+        dest = self._ai_service.choose_destination_stage2(payload, model=model, user_requirements=user_requirements)
         if dest not in allowed_folders:
             # enforce constraint
             return "其他" if "其他" in allowed_folders else allowed_folders[-1]
@@ -118,12 +133,18 @@ class OrganizerWorkflow:
         file_items: List[Dict[str, Any]],
         allowed_folders: List[str],
         model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
     ) -> List[str]:
         payload = {
             "allowed_folders": allowed_folders,
             "files": file_items,
         }
-        assignments = self._ai_service.choose_destinations_batch_stage2(payload, model=model)
+        assignments = self._ai_service.choose_destinations_batch_stage2(
+            payload,
+            model=model,
+            user_requirements=user_requirements,
+        )
 
         # Build a map by relative_path to be resilient to minor model mistakes
         by_path: Dict[str, str] = {}
@@ -344,6 +365,153 @@ class OrganizerWorkflow:
             json.dump(journal, f, ensure_ascii=False, indent=2)
         return path
 
+    def cleanup_empty_folders(self, root_path: str, *, exclude: Optional[List[str]] = None) -> List[str]:
+        """Delete empty folders under root_path and return removed folder relative paths.
+
+        Notes:
+        - Traverses bottom-up so nested empty folders are removed safely.
+        - Always excludes `.autosniffer_history`.
+        """
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        excluded = {".autosniffer_history"}
+        for x in exclude or []:
+            v = str(x or "").strip().strip("\\/")
+            if v:
+                excluded.add(v)
+
+        removed: List[str] = []
+        history_abs = os.path.join(root_path, ".autosniffer_history")
+
+        for dirpath, dirnames, filenames in os.walk(root_path, topdown=False):
+            # Never delete root itself
+            if os.path.abspath(dirpath) == os.path.abspath(root_path):
+                continue
+            # Never touch history folder
+            if os.path.abspath(dirpath).startswith(os.path.abspath(history_abs) + os.sep):
+                continue
+
+            rel = os.path.relpath(dirpath, root_path)
+            rel_norm = rel.replace("\\", "/")
+            top_name = rel.split(os.sep, 1)[0] if rel else ""
+            if top_name in excluded or rel_norm in excluded:
+                continue
+
+            try:
+                if os.path.isdir(dirpath) and not os.listdir(dirpath):
+                    os.rmdir(dirpath)
+                    removed.append(rel_norm)
+            except Exception:
+                # best-effort cleanup
+                pass
+
+        removed.sort(key=lambda s: (s.count("/"), len(s)))
+        return removed
+
+    # --- Smart Rename ---
+
+    @staticmethod
+    def _sanitize_filename_component(text: str, max_len: int = 32) -> str:
+        """Sanitize a filename component for Windows and trim length."""
+        s = (text or "").strip()
+        if not s:
+            return ""
+        # remove Windows-illegal characters
+        for ch in '<>:"/\\|?*':
+            s = s.replace(ch, " ")
+        s = " ".join(s.split())
+        s = s.strip(" .\t\r\n")
+        if not s:
+            return ""
+        if len(s) > max_len:
+            s = s[:max_len].rstrip(" .")
+        return s
+
+    @staticmethod
+    def _truncate_words(text: str, *, threshold_words: int = 100, max_words: int = 1000) -> str:
+        words = (text or "").split()
+        if len(words) > threshold_words:
+            words = words[:max_words]
+        return " ".join(words)
+
+    def rename_detect_ambiguous(
+        self,
+        directory_json: str,
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        if not directory_json or not directory_json.strip():
+            raise ValueError("directory_json 不能为空")
+        return self._ai_service.detect_ambiguous_files_for_rename(directory_json, model=model, user_requirements=user_requirements)
+
+    def rename_suggest_prefix(
+        self,
+        file_item: Dict[str, Any],
+        content_snippet: str,
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> str:
+        payload = {
+            "file": {
+                "name": file_item.get("name"),
+                "relative_path": file_item.get("relative_path"),
+                "extension": file_item.get("extension"),
+            },
+            "content_snippet": content_snippet,
+        }
+        prefix = self._ai_service.suggest_prefix_for_rename(payload, model=model, user_requirements=user_requirements)
+        return self._sanitize_filename_component(prefix, max_len=32)
+
+    def rename_extract_content(self, root_path: str, file_relative_path: str) -> str:
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        rel = (file_relative_path or "").replace("/", "\\")
+        abs_path = os.path.join(root_path, rel)
+        text = extract_text_from_file(abs_path, max_length=50000) or ""
+        return self._truncate_words(text, threshold_words=100, max_words=1000)
+
+    def rename_apply_prefix(self, root_path: str, file_relative_path: str, prefix: str) -> Dict[str, Any]:
+        """Rename a file by prepending '<prefix>_' to the original filename.
+
+        Returns: {old_rel, new_rel, status, error, conflict}
+        """
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        rel = (file_relative_path or "").replace("/", "\\")
+        old_abs = os.path.join(root_path, rel)
+        old_rel_norm = rel.replace("\\", "/")
+
+        if not os.path.exists(old_abs):
+            return {"old_rel": old_rel_norm, "new_rel": "", "status": "skipped", "error": "文件不存在", "conflict": False}
+
+        base_dir = os.path.dirname(old_abs)
+        old_name = os.path.basename(old_abs)
+        safe_prefix = self._sanitize_filename_component(prefix, max_len=32)
+        if not safe_prefix:
+            return {"old_rel": old_rel_norm, "new_rel": "", "status": "skipped", "error": "prefix 为空", "conflict": False}
+
+        new_name = f"{safe_prefix}_{old_name}"
+        new_abs = os.path.join(base_dir, new_name)
+
+        conflict = False
+        if os.path.exists(new_abs):
+            conflict = True
+            # Add suffix to avoid overwriting
+            stem, ext = os.path.splitext(new_name)
+            i = 1
+            while True:
+                candidate = os.path.join(base_dir, f"{stem}__dup{i}{ext}")
+                if not os.path.exists(candidate):
+                    new_abs = candidate
+                    break
+                i += 1
+
+        try:
+            os.rename(old_abs, new_abs)
+            new_rel = os.path.relpath(new_abs, root_path).replace("\\", "/")
+            return {"old_rel": old_rel_norm, "new_rel": new_rel, "status": "renamed", "error": "", "conflict": conflict}
+        except Exception as e:
+            return {"old_rel": old_rel_norm, "new_rel": "", "status": "failed", "error": str(e), "conflict": conflict}
+
     def load_last_journal(self, root_path: str) -> Optional[Tuple[str, Dict[str, Any]]]:
         root_path = OrganizerWorkflow.validate_root_path(root_path)
         history = self._history_dir(root_path)
@@ -443,6 +611,24 @@ class OrganizerWorkflow:
                 except Exception:
                     pass
 
+        # Re-create folders that were deleted during post-move cleanup
+        restored_empty_dirs: List[str] = []
+        deleted_empty_folders = journal.get("deleted_empty_folders") or []
+        if isinstance(deleted_empty_folders, list):
+            for rel in [str(x) for x in deleted_empty_folders if str(x).strip()]:
+                rel_clean = rel.strip().strip("\\/")
+                if not rel_clean or rel_clean == ".autosniffer_history":
+                    continue
+                abs_dir = os.path.join(root_path, rel_clean.replace("/", "\\"))
+                try:
+                    if os.path.exists(abs_dir) and not os.path.isdir(abs_dir):
+                        continue
+                    if not os.path.isdir(abs_dir):
+                        os.makedirs(abs_dir, exist_ok=True)
+                        restored_empty_dirs.append(rel_clean.replace("\\", "/"))
+                except Exception:
+                    pass
+
         # Write an undo report next to journal
         report = {
             "journal": os.path.basename(journal_path),
@@ -451,6 +637,7 @@ class OrganizerWorkflow:
             "conflicts": conflict_count,
             "failed": fail_count,
             "removed_empty_folders": removed_dirs,
+            "restored_empty_folders": restored_empty_dirs,
             "undo_results": undo_results,
         }
         report_path = os.path.join(os.path.dirname(journal_path), f"{Path(journal_path).stem}__undo.json")
