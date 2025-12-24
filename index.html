@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoSniffer - 让 AI 为您的文件安个家</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Noto+Serif+SC:wght@400;600;900&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --rococo-gold: #c5a059;
+        --rococo-rose: #fdf2f2;
+        --rococo-mint: #f0f7f4;
+        --rococo-cream: #fffdfa;
+        --deep-amber: #4a3728;
+      }
+      body {
+        font-family: 'Noto Serif SC', serif;
+        background-color: var(--rococo-cream);
+        color: var(--deep-amber);
+        overflow-x: hidden;
+      }
+      .title-font { font-family: 'Playfair Display', serif; }
+      .logo-font { font-family: 'Cinzel', serif; }
+      
+      .rococo-gradient {
+        background: 
+          radial-gradient(circle at 0% 0%, rgba(253, 242, 242, 0.8), transparent 50%),
+          radial-gradient(circle at 100% 100%, rgba(240, 247, 244, 0.8), transparent 50%),
+          url('https://www.transparenttextures.com/patterns/cream-paper.png'),
+          #fffdfa;
+      }
+      .glass {
+        background: rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(197, 160, 89, 0.2);
+        box-shadow: 0 20px 50px rgba(74, 55, 40, 0.05);
+      }
+      @keyframes slow-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .gear-spin { animation: slow-spin 20s linear infinite; }
+      
+      .perspective-container { perspective: 2500px; }
+      
+      @keyframes float {
+        0%, 100% { transform: translateY(0) rotate(45deg); opacity: 0.1; }
+        50% { transform: translateY(-20px) rotate(45deg); opacity: 0.2; }
+      }
+      .floating { animation: float 6s ease-in-out infinite; }
+      
+      .scroll-shadow {
+        box-shadow: inset 0 0 50px rgba(197, 160, 89, 0.1);
+      }
+
+      /* 卷轴式进入动画 */
+      .panel-enter {
+        animation: panelSlideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      @keyframes panelSlideIn {
+        from { opacity: 0; transform: translateY(30px) rotateX(-10deg); }
+        to { opacity: 1; transform: translateY(0) rotateX(0); }
+      }
+    </style>
+
+  <link rel="stylesheet" href="/index.css">
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.2.3",
+    "react-dom": "https://esm.sh/react-dom@19.2.3",
+    "react-dom/client": "https://esm.sh/react-dom@19.2.3/client",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/AutoSniffer/assets/index-DDFlK9tY.js"></script>
+</head>
+  <body>
+    <div id="root"></div>
+</body>
+</html>
