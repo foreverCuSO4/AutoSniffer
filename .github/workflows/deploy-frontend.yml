@@ -1,5 +1,10 @@
 name: Deploy Frontend (leaflet) to GitHub Pages
 
+# Grant Actions permission to update repository contents and Pages
+permissions:
+  contents: write
+  pages: write
+
 on:
   push:
     branches: [ "main", "master" ]
