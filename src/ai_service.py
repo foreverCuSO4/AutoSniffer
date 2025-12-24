@@ -1,4 +1,5 @@
 import json
+import base64
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -18,12 +19,14 @@ class AIService:
         )
 
     @staticmethod
-    def _normalize_user_requirements(text: Optional[str], *, max_len: int = 800) -> str:
+    def _normalize_user_requirements(text: Optional[str], *, max_len: int = 2000) -> str:
         s = (text or "").strip()
         if not s:
             return ""
-        # collapse whitespace
-        s = " ".join(s.split())
+        # Keep line breaks (users often enter bullet-style constraints), but normalize whitespace per-line.
+        lines = [" ".join(line.split()) for line in s.splitlines()]
+        lines = [line for line in lines if line]
+        s = "\n".join(lines)
         if len(s) > max_len:
             s = s[:max_len].rstrip()
         return s
@@ -53,14 +56,17 @@ class AIService:
         model_to_use = (model or config.MODEL_NAME or "").strip()
         if not model_to_use:
             raise ValueError("未配置模型名称")
+        req_norm = self._normalize_user_requirements(user_requirements)
         system_prompt = self._apply_user_requirements(system_prompt, user_requirements)
         try:
+            messages = [{"role": "system", "content": system_prompt}]
+            # Some models/providers under-weight system prompt details; also send requirements explicitly.
+            if req_norm:
+                messages.append({"role": "user", "content": f"个性化要求（请严格遵守）：\n{req_norm}"})
+            messages.append({"role": "user", "content": user_content})
             completion = self.client.chat.completions.create(
                 model=model_to_use,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
+                messages=messages,
             )
             return str(completion.choices[0].message.content or "")
         except Exception as e:
@@ -201,7 +207,11 @@ class AIService:
         *,
         user_requirements: Optional[str] = None,
     ) -> str:
-        """Given file info + extracted content snippet, return a short rename prefix string."""
+        """Given file info + extracted content snippet, return a short rename prefix string.
+
+        Note: We prefer using `description` as the filename prefix, but keep a fallback
+        to older responses that return `prefix`.
+        """
         raw = self._chat(
             config.SYSTEM_PROMPT_RENAME_SUGGEST_PREFIX,
             json.dumps(payload, ensure_ascii=False),
@@ -209,10 +219,104 @@ class AIService:
             user_requirements=user_requirements,
         )
         obj = self._parse_json_object(raw)
+        description = obj.get("description")
+        if isinstance(description, str) and description.strip():
+            return description.strip()
         prefix = obj.get("prefix")
-        if not isinstance(prefix, str) or not prefix.strip():
-            raise ValueError("智能重命名返回格式错误：缺少 prefix")
-        return prefix.strip()
+        if isinstance(prefix, str) and prefix.strip():
+            return prefix.strip()
+        raise ValueError("智能重命名返回格式错误：缺少 description")
+
+    def describe_image_for_rename(
+        self,
+        image_base64: str,
+        file_info: Dict[str, Any],
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> str:
+        """Use multimodal model to describe image content and return a filename prefix.
+
+        Note: For image rename flow we prefer using `description` as the filename prefix.
+        """
+        if not self._api_key:
+            raise ValueError("未配置 API Key。请在 UI 中填写，或设置环境变量 AUTOSNIFFER_API_KEY/DASHSCOPE_API_KEY。")
+        
+        model_to_use = (model or config.MODEL_NAME_STAGE2 or "").strip()
+        if not model_to_use:
+            raise ValueError("未配置模型名称")
+        
+        # Use qwen-vl series for image understanding
+        if "qwen" in model_to_use.lower() and "vl" not in model_to_use.lower():
+            # Automatically switch to vision model
+            model_to_use = "qwen-vl-max"
+        
+        system_prompt = """你是一位图片内容识别专家。你将收到一张图片和文件信息。
+
+个性化要求（可选；如果为空请忽略）：
+<<USER_REQUIREMENTS>>
+
+任务：
+1) 仔细观察图片内容
+2) 用简洁的中文描述图片的主要内容（不超过15个字）
+3) 生成一个适合作为文件名前缀的简短描述（3-8个字）
+
+输出要求（必须严格遵守）：
+- 只输出一个 JSON 对象，不能包含任何额外文本
+- JSON 结构固定为：{"description": "用于文件名前缀的描述"}
+- description：用于文件名前缀的内容描述，建议 6-18 个字，尽量避免标点符号
+
+示例：
+{"description": "傍晚海边日落景色"}
+{"description": "年度总结会议现场"}
+"""
+        
+        req_norm = self._normalize_user_requirements(user_requirements)
+        system_prompt = self._apply_user_requirements(system_prompt, user_requirements)
+        
+        file_name = file_info.get("name", "")
+        file_path = file_info.get("relative_path", "")
+        
+        user_content = f"文件名：{file_name}\n相对路径：{file_path}\n\n请分析这张图片并生成重命名前缀。"
+        
+        try:
+            completion = self.client.chat.completions.create(
+                model=model_to_use,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            *(
+                                [{"type": "text", "text": f"个性化要求（请严格遵守）：\n{req_norm}"}]
+                                if req_norm
+                                else []
+                            ),
+                            {"type": "text", "text": user_content},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                            },
+                        ],
+                    },
+                ],
+                max_tokens=200,
+            )
+            raw = str(completion.choices[0].message.content or "")
+            obj = self._parse_json_object(raw)
+            # Prefer description as the filename prefix (user request). Fallback to prefix for compatibility.
+            description = obj.get("description")
+            if isinstance(description, str) and description.strip():
+                return description.strip()
+            prefix = obj.get("prefix")
+            if isinstance(prefix, str) and prefix.strip():
+                return prefix.strip()
+            raise ValueError("图片识别返回格式错误：缺少 description")
+        except Exception as e:
+            # Add minimal context to help users debug provider/model incompatibilities.
+            ctx = f"model={model_to_use}, base_url={self._base_url or '(default)'}, image_b64_len={len(image_base64 or '')}"
+            print(f"AI Image Service Error: {e} ({ctx})")
+            raise RuntimeError(f"图片识别调用失败: {e} ({ctx})") from e
 
     def get_organization_plan(self, directory_json):
         """

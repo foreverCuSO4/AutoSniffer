@@ -4,3 +4,4 @@ PyPDF2
 python-docx
 python-pptx
 pandas
+Pillow

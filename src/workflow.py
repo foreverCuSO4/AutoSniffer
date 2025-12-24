@@ -1,16 +1,21 @@
 import json
 import os
 import shutil
+import base64
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from io import BytesIO
+
+from PIL import Image, ImageOps
 
 from extract import extract_text_from_file
 
 from . import file_ops
 from .ai_service import AIService
 from . import cmd_executor
+from . import config
 
 
 @dataclass
@@ -444,6 +449,52 @@ class OrganizerWorkflow:
             raise ValueError("directory_json 不能为空")
         return self._ai_service.detect_ambiguous_files_for_rename(directory_json, model=model, user_requirements=user_requirements)
 
+    @staticmethod
+    def _is_image_file(file_path: str) -> bool:
+        """Check if file is an image based on extension."""
+        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'}
+        ext = os.path.splitext(file_path)[1].lower()
+        return ext in image_extensions
+
+    @staticmethod
+    def _resize_image_if_needed(image_path: str, max_width: int = 1920, max_height: int = 1080) -> Image.Image:
+        """Resize image if larger than specified dimensions (1080p)."""
+        with Image.open(image_path) as opened:
+            img = ImageOps.exif_transpose(opened)
+            img.load()
+
+        width, height = img.size
+
+        # Check if resize is needed
+        if width <= max_width and height <= max_height:
+            return img
+
+        # Calculate new dimensions maintaining aspect ratio
+        ratio = min(max_width / width, max_height / height)
+        new_width = max(1, int(width * ratio))
+        new_height = max(1, int(height * ratio))
+
+        # Resize using high-quality filter
+        resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        return resized
+
+    @staticmethod
+    def _image_to_base64(img: Image.Image, format: str = "JPEG", *, quality: int = 75) -> str:
+        """Convert PIL Image to base64 string."""
+        buffered = BytesIO()
+        # Convert RGBA to RGB for JPEG
+        if img.mode == 'RGBA' and format.upper() == 'JPEG':
+            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+            rgb_img.paste(img, mask=img.split()[3] if len(img.split()) == 4 else None)
+            rgb_img.save(buffered, format=format, quality=quality, optimize=True)
+        else:
+            # Ensure JPEG is RGB
+            if format.upper() == 'JPEG' and img.mode != 'RGB':
+                img = img.convert('RGB')
+            img.save(buffered, format=format, quality=quality, optimize=True)
+        img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        return img_str
+
     def rename_suggest_prefix(
         self,
         file_item: Dict[str, Any],
@@ -462,6 +513,38 @@ class OrganizerWorkflow:
         }
         prefix = self._ai_service.suggest_prefix_for_rename(payload, model=model, user_requirements=user_requirements)
         return self._sanitize_filename_component(prefix, max_len=32)
+
+    def rename_suggest_prefix_for_image(
+        self,
+        root_path: str,
+        file_item: Dict[str, Any],
+        model: Optional[str] = None,
+        *,
+        user_requirements: Optional[str] = None,
+    ) -> str:
+        """Use multimodal AI to generate prefix for image files."""
+        root_path = OrganizerWorkflow.validate_root_path(root_path)
+        rel = (file_item.get("relative_path") or "").replace("/", "\\")
+        abs_path = os.path.join(root_path, rel)
+        
+        if not os.path.exists(abs_path):
+            raise ValueError(f"图片文件不存在: {abs_path}")
+        
+        # Resize if needed and convert to base64
+        img = self._resize_image_if_needed(abs_path, max_width=1920, max_height=1080)
+        
+        # Always encode to JPEG for maximum compatibility with OpenAI-style multimodal APIs.
+        image_base64 = self._image_to_base64(img, format='JPEG', quality=75)
+        
+        # Call multimodal AI service (returns `description` preferred as filename prefix)
+        model_to_use = (model or config.MODEL_NAME_IMAGE or "").strip() or None
+        description = self._ai_service.describe_image_for_rename(
+            image_base64,
+            file_item,
+            model=model_to_use,
+            user_requirements=user_requirements,
+        )
+        return self._sanitize_filename_component(description, max_len=32)
 
     def rename_extract_content(self, root_path: str, file_relative_path: str) -> str:
         root_path = OrganizerWorkflow.validate_root_path(root_path)

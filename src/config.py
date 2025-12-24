@@ -9,9 +9,10 @@ API_KEY = (
 	or ""
 )
 API_BASE_URL = os.getenv("AUTOSNIFFER_API_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MODEL_NAME = os.getenv("AUTOSNIFFER_MODEL_NAME") or "qwen-flash"
+MODEL_NAME = os.getenv("AUTOSNIFFER_MODEL_NAME") or "qwen3-30b-a3b-instruct-2507"
 MODEL_NAME_STAGE1 = os.getenv("AUTOSNIFFER_MODEL_STAGE1") or MODEL_NAME
 MODEL_NAME_STAGE2 = os.getenv("AUTOSNIFFER_MODEL_STAGE2") or MODEL_NAME
+MODEL_NAME_IMAGE = os.getenv("AUTOSNIFFER_MODEL_IMAGE") or "qwen3-vl-plus-2025-12-19"
 
 # Default Paths
 DEFAULT_ROOT_PATH = "./test_files"
@@ -162,15 +163,15 @@ SYSTEM_PROMPT_RENAME_SUGGEST_PREFIX = """
 <<USER_REQUIREMENTS>>
 
 任务：
-根据 content_snippet 的主题，为该文件生成一个“简短、信息密度高、可读”的中文或英文标题前缀，用于添加到原文件名前。
+根据 content_snippet 的主题，为该文件生成一个“简短、信息密度高、可读”的中文或英文描述，用于添加到原文件名前。
 
 输出要求（必须严格遵守）：
 - 只输出一个 JSON 对象，不能包含任何额外文本。
-- JSON 结构固定为：{"prefix": "..."}
+- JSON 结构固定为：{"description": "..."}
 
 命名约束：
-- prefix 只作为“前缀”，不要包含文件扩展名。
-- prefix 不要包含路径分隔符（/ \\），不要包含 Windows 不允许的字符：<>:"/\\|?*。
-- prefix 建议 6~24 个字符（中文算 1 个字符），尽量避免过长。
+- description 只作为“前缀”，不要包含文件扩展名。
+- description 不要包含路径分隔符（/ \\），不要包含 Windows 不允许的字符：<>:"/\\|?*。
+- description 建议 6~24 个字符（中文算 1 个字符），尽量避免过长。
 - 不要输出引号外的解释、不输出 markdown。
 """

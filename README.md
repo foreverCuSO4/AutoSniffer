@@ -20,6 +20,10 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 	- 🧱 阶段1：仅规划分类目录并创建文件夹
 	- 📦 阶段2：按批调用模型归类并移动文件
 - 🖥️ 图形界面（Flet）：进度展示、可停止
+- 🏷️ 智能重命名（Smart Rename）
+	- 🔎 AI 识别“命名模糊”的文件
+	- 🧾 对文档提取内容生成命名描述（description）并以 `description_原文件名` 重命名
+	- 🖼️ 对图片使用多模态模型描述内容（超 1080p 自动缩放至 1920×1080 以内）再重命名
 - ↩️ “撤销上一次”（尽量还原）
 	- 🧾 使用 `.autosniffer_history/` 日志
 	- 🧷 冲突时自动改名保留两份
@@ -43,6 +47,7 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 
 - 🪟 推荐 Windows（项目内的执行器与路径处理主要面向 Windows）
 - 🐍 推荐 Python 3.9+
+- 🖼️ 图片重命名依赖 `Pillow`（用于 resize/编码）
 
 安装依赖：
 
@@ -74,6 +79,14 @@ GUI 内操作：
 4. 🧱 阶段1：**阶段1：生成目录** →（可编辑目录列表）→ **阶段1：创建文件夹**
 5. 📦 阶段2：**阶段2：批量移动**
 
+智能重命名（可选）：
+
+1. 🏷️ 打开 **智能重命名**
+2. 📁 选择目录 → **分析目录**
+3. 🔎 点击 **识别命名模糊文件**
+4. ✍️ 点击 **生成重命名预览**（文档会提取内容；图片会走多模态识别）
+5. ✅ 确认后点击 **执行重命名**
+
 建议：🧪 第一次对重要目录操作前，先备份或在测试目录试跑。
 
 ---
@@ -88,6 +101,7 @@ GUI 内操作：
 	- 默认：`https://dashscope.aliyuncs.com/compatible-mode/v1`
 
 - 🧠 `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
+- 🖼️ `AUTOSNIFFER_MODEL_IMAGE`（图片/多模态重命名模型）
 - 🏷️ `AUTOSNIFFER_MODEL_NAME`（兜底模型名）
 - 📦 `AUTOSNIFFER_STAGE2_BATCH_SIZE`（仅 CLI 使用；GUI 使用界面字段）
 
@@ -95,6 +109,7 @@ GUI 内操作：
 
 - 阶段1：更偏“规划”与“稳定输出 JSON”
 - 阶段2：更偏“批量分类”与“严格受控输出”
+- 图片重命名：使用支持多模态/视觉的模型（例如 qwen-vl 系列）
 
 ---
 
@@ -163,6 +178,12 @@ python extract.py --batch a.docx b.pdf c.pptx
 - 🤖 换更稳定的模型。
 - 📦 调小批大小。
 
+### 智能重命名：图片识别失败
+
+- 🖼️ 在“设置”里确认填写了 **图片处理模型**（或设置 `AUTOSNIFFER_MODEL_IMAGE`），并且模型确实支持多模态。
+- 🌐 检查 `API Base URL` 是否为支持多模态的 OpenAI 兼容接口。
+- 🧾 查看运行日志中输出的错误信息（会包含 model/base_url 等上下文）。
+
 ### 部分文件未移动
 
 - 🔐 检查文件权限。
@@ -191,6 +212,10 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 	- 🧱 Stage 1: only plans folders, then creates folders
 	- 📦 Stage 2: batch classification + move
 - 🖥️ GUI (Flet) with progress + stop
+- 🏷️ Smart Rename
+	- 🔎 AI detects “ambiguous names”
+	- 🧾 For documents, extracts text and generates a `description`, renaming as `description_original`
+	- 🖼️ For images, uses a multimodal (vision) model to describe content (auto-resize >1080p down to within 1920×1080)
 - ↩️ Best-effort Undo last run
 	- 🧾 Uses a journal under `.autosniffer_history/`
 	- 🧷 Conflict-safe renaming on restore
@@ -214,6 +239,7 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 
 - 🪟 Windows recommended
 - 🐍 Python 3.9+ recommended
+- 🖼️ Smart Rename (images) requires `Pillow` for resize/encoding
 
 Install dependencies:
 
@@ -245,6 +271,14 @@ In the GUI:
 4. 🧱 Stage 1: click **Generate folders**, optionally edit the folder list, then click **Create folders** (no files are moved)
 5. 📦 Stage 2: click **Batch move** to classify and move files (real moves)
 
+Optional: Smart Rename
+
+1. 🏷️ Go to **Smart Rename** tab
+2. 📁 Choose folder → **Scan/Analyze**
+3. 🔎 Click **Detect ambiguous names**
+4. ✍️ Click **Build rename preview** (docs extract text; images use multimodal vision)
+5. ✅ Click **Apply rename**
+
 Tip: 🧪 for important folders, test on a copy first.
 
 ---
@@ -259,6 +293,7 @@ Tip: 🧪 for important folders, test on a copy first.
 	- Default: `https://dashscope.aliyuncs.com/compatible-mode/v1`
 
 - 🧠 `AUTOSNIFFER_MODEL_STAGE1` / `AUTOSNIFFER_MODEL_STAGE2`
+- 🖼️ `AUTOSNIFFER_MODEL_IMAGE` (multimodal/vision model for image rename)
 - 🏷️ `AUTOSNIFFER_MODEL_NAME` (fallback model name)
 - 📦 `AUTOSNIFFER_STAGE2_BATCH_SIZE` (CLI only; GUI uses the field)
 
@@ -266,6 +301,7 @@ Tip: 🧪 for important folders, test on a copy first.
 
 - Stage 1: better at planning + strict JSON output
 - Stage 2: better at batch classification + strict JSON output
+- Image rename: use a vision-capable model (e.g. Qwen VL series)
 
 ---
 
@@ -333,6 +369,12 @@ Outputs are saved under `extracted_texts/` by default for `--dir` mode.
 
 - 🤖 Try a more stable model.
 - 📦 Reduce batch size.
+
+### Smart Rename: image recognition fails
+
+- 🖼️ Ensure **Image model** is set in Settings (or set `AUTOSNIFFER_MODEL_IMAGE`) and the model supports vision.
+- 🌐 Verify your `API Base URL` is an OpenAI-compatible endpoint that supports multimodal requests.
+- 🧾 Check the run logs (they include model/base_url context).
 
 ### Some files not moved
 

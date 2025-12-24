@@ -203,8 +203,12 @@ def main(page: ft.Page):
         base_url_field.disabled = is_busy_flag
         stage1_model_field.disabled = is_busy_flag
         stage2_model_field.disabled = is_busy_flag
+        image_model_field.disabled = is_busy_flag
         batch_size_field.disabled = is_busy_flag
         progress.visible = is_busy_flag
+        # Indeterminate header progress bar + ring = a small, elegant busy animation.
+        progress.value = None if is_busy_flag else 0
+        busy_ring.visible = is_busy_flag
 
         refresh_action_states()
 
@@ -328,6 +332,7 @@ def main(page: ft.Page):
     )
 
     progress = ft.ProgressBar(visible=False)
+    busy_ring = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=3)
 
     logs = ft.ListView(expand=True, spacing=6, auto_scroll=True)
 
@@ -365,6 +370,12 @@ def main(page: ft.Page):
     stage2_model_field = ft.TextField(
         label="阶段2模型",
         value=getattr(config, "MODEL_NAME_STAGE2", "") or "qwen-flash",
+        width=200,
+    )
+
+    image_model_field = ft.TextField(
+        label="图片处理模型",
+        value=getattr(config, "MODEL_NAME_IMAGE", "") or "qwen-vl-max",
         width=200,
     )
 
@@ -772,24 +783,58 @@ def main(page: ft.Page):
 
                 rp = str(fi.get("relative_path") or "")
                 name = str(fi.get("name") or "")
+                ext = str(fi.get("extension") or "").lower()
                 rename_progress_text.value = f"处理中：{done}/{total}"
                 page.update()
 
-                snippet = wf.rename_extract_content(root_path, rp)
-                if not snippet.strip():
-                    prefix = "内容为空"
+                # Check if it's an image file
+                image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'}
+                is_image = ext in image_extensions
+
+                if is_image:
+                    # Use multimodal AI for image files
+                    try:
+                        log(f"智能重命名：使用多模态AI识别图片 {name}")
+                        prefix = wf.rename_suggest_prefix_for_image(
+                            root_path,
+                            fi,
+                            model=(image_model_field.value or stage2_model_field.value or "").strip(),
+                            user_requirements=(rename_requirements_field.value or "").strip() or None,
+                        )
+                        if not prefix:
+                            prefix = "未识别"
+                    except Exception as img_ex:
+                        err = str(img_ex)
+                        log(f"图片识别失败 {name}: {err}")
+                        # Keep prefix short, but show reason in preview line for debugging.
+                        prefix = "识别失败"
                 else:
-                    prefix = wf.rename_suggest_prefix(
-                        fi,
-                        snippet,
-                        model=(stage2_model_field.value or "").strip(),
-                        user_requirements=(rename_requirements_field.value or "").strip() or None,
-                    )
-                    if not prefix:
-                        prefix = "未命名"
+                    # Use text extraction for non-image files
+                    snippet = wf.rename_extract_content(root_path, rp)
+                    if not snippet.strip():
+                        prefix = "内容为空"
+                    else:
+                        prefix = wf.rename_suggest_prefix(
+                            fi,
+                            snippet,
+                            model=(stage2_model_field.value or "").strip(),
+                            user_requirements=(rename_requirements_field.value or "").strip() or None,
+                        )
+                        if not prefix:
+                            prefix = "未命名"
 
                 new_name = f"{prefix}_{name}"
-                lines.append(f"{rp}  ->  {new_name}")
+                if is_image and prefix == "识别失败":
+                    reason = (str(img_ex) if 'img_ex' in locals() else '').strip()
+                    if reason:
+                        reason = reason.replace('\n', ' ')
+                        if len(reason) > 120:
+                            reason = reason[:120] + "..."
+                        lines.append(f"{rp}  ->  {new_name}  # {reason}")
+                    else:
+                        lines.append(f"{rp}  ->  {new_name}")
+                else:
+                    lines.append(f"{rp}  ->  {new_name}")
                 rename_preview_items.append({"relative_path": rp, "prefix": prefix, "old_name": name, "new_name": new_name})
 
                 done += 1
@@ -953,6 +998,7 @@ def main(page: ft.Page):
                 ft.Text("智能文件整理", size=14, color=ft.Colors.GREY_700),
                 ft.Container(expand=True),
                 progress,
+                busy_ring,
                 undo_btn,
                 stop_btn,
             ],
@@ -1125,7 +1171,7 @@ def main(page: ft.Page):
                 api_key_field,
                 base_url_field,
                 ft.Text("模型与执行参数", weight=ft.FontWeight.BOLD),
-                ft.Row(controls=[stage1_model_field, stage2_model_field], spacing=10),
+                ft.Row(controls=[stage1_model_field, stage2_model_field, image_model_field], spacing=10, wrap=True),
                 ft.Row(controls=[batch_size_field, timeout_field], spacing=10),
             ],
             spacing=12,
