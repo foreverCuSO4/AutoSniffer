@@ -1,6 +1,8 @@
 
 # AutoSniffer 🗂️
 
+[![宣传折页 / Brochure](https://img.shields.io/badge/%E5%AE%A3%E4%BC%A0%E6%8A%98%E9%A1%B5-Brochure-%23c5a059)](https://forevercuso4.github.io/AutoSniffer/)
+
 [![English 🇺🇸](https://img.shields.io/badge/Language-English-blue)](#english)
 [![中文 🇨🇳](https://img.shields.io/badge/语言-中文-brightgreen)](#chinese)
 
@@ -11,6 +13,9 @@
 ## 中文 🇨🇳
 
 AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashScope/Qwen）的**两阶段文件整理工具**，提供桌面 GUI（Flet）来扫描目录、生成分类目录、批量归类移动文件，并支持“撤销上一次整理”（尽量还原到执行前状态，遇到冲突会自动改名保留）。
+
+✅ **Windows 免安装版**：`AutoSniffer.exe v1.0.0` 已发布在 Releases，下载即可一键运行：
+https://github.com/foreverCuSO4/AutoSniffer/releases
 
 ---
 
@@ -27,8 +32,6 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 - ↩️ “撤销上一次”（尽量还原）
 	- 🧾 使用 `.autosniffer_history/` 日志
 	- 🧷 冲突时自动改名保留两份
-- 📄 附带文本提取脚本
-	- 🔎 支持从 `pdf/docx/pptx/xlsx/txt/...` 提取文本便于查看
 
 ---
 
@@ -39,7 +42,6 @@ AutoSniffer 是一个基于大模型（OpenAI 兼容接口，如阿里云 DashSc
 - `src/ai_service.py`：大模型调用封装
 - `src/cmd_executor.py`：PowerShell 执行器（主要用于旧脚本/CLI）
 - `main.py`：CLI 示例
-- `extract.py`：文本提取工具
 
 ---
 
@@ -146,27 +148,6 @@ python main.py
 
 ---
 
-## 文本提取工具 📄
-
-`extract.py` 支持从常见文档中提取文本。
-
-示例：
-
-```bash
-# 单文件
-python extract.py path\to\document.pdf
-
-# 提取目录下所有支持的文件
-python extract.py --dir path\to\folder
-
-# 批量模式
-python extract.py --batch a.docx b.pdf c.pptx
-```
-
-`--dir` 模式下默认输出到 `extracted_texts/`。
-
----
-
 ## 常见问题 🩺
 
 ### 未填写 API Key
@@ -204,6 +185,9 @@ python extract.py --batch a.docx b.pdf c.pptx
 
 AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API, e.g. DashScope/Qwen) with a desktop GUI (Flet). It scans a folder, proposes categories, moves files in batches, and supports **Undo last run** (best-effort restore with conflict-safe renaming).
 
+✅ **Windows portable build**: `AutoSniffer.exe v1.0.0` is available in Releases (download and run):
+https://github.com/foreverCuSO4/AutoSniffer/releases
+
 ---
 
 ## Features ✨
@@ -219,8 +203,6 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 - ↩️ Best-effort Undo last run
 	- 🧾 Uses a journal under `.autosniffer_history/`
 	- 🧷 Conflict-safe renaming on restore
-- 📄 Optional text extraction tool
-	- 🔎 Extract text from `pdf/docx/pptx/xlsx/txt/...` for inspection
 
 ---
 
@@ -231,7 +213,6 @@ AutoSniffer is a **two-stage AI-powered file organizer** (OpenAI-compatible API,
 - `src/ai_service.py`: AI calls (OpenAI SDK)
 - `src/cmd_executor.py`: PowerShell runner (used by legacy CLI/batch scripts)
 - `main.py`: CLI demo (two-stage batch)
-- `extract.py`: text extraction utility
 
 ---
 
@@ -335,27 +316,6 @@ python main.py
 ```
 
 For most users, the GUI is recommended.
-
----
-
-## Text Extraction Utility 📄
-
-`extract.py` can extract text from common document formats.
-
-Examples:
-
-```bash
-# single file
-python extract.py path\to\document.pdf
-
-# extract all supported files under a directory
-python extract.py --dir path\to\folder
-
-# batch mode
-python extract.py --batch a.docx b.pdf c.pptx
-```
-
-Outputs are saved under `extracted_texts/` by default for `--dir` mode.
 
 ---
 
